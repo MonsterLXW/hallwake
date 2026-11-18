@@ -1,0 +1,41 @@
+flowchart LR
+  subgraph client["Browser (Vite dev :8402 / static build)"]
+    UI["React 5 screens<br/>Hub Dossier Matchup DraftBoard CompLab"]
+    PANELS["Panels: Explain/Weights, AI Q&A,<br/>offline banner"]
+    UI --- PANELS
+  end
+
+  subgraph backend["FastAPI :8401"]
+    ROUTERS["Routers<br/>system catalog teams matchup draft comp matrix weights ai"]
+    STORE["services/store.py<br/>DB to analyzer-type loader"]
+    subgraph analyzer["Deterministic core (pure, pytest golden tests)"]
+      DRAFT["draft.py<br/>VCT-style state machine"]
+      MATRIX["matrix.py roles.py<br/>synergy counter role-coverage map-fit threat"]
+      RANK["ranking.py<br/>matchup-conditioned counter-picks + reason chains"]
+    end
+    LLM["services/llm.py<br/>httpx + Semaphore(1) + 12s timeout"]
+    GUARD["services/llm_guard.py<br/>novel-number guard, JSON schema"]
+    ROUTERS --> STORE
+    ROUTERS --> DRAFT
+    DRAFT --> MATRIX --> RANK
+    ROUTERS -. "narration only" .-> LLM
+    LLM --> GUARD
+  end
+
+  subgraph data["SQLite data/gcradar.db (DataGrip)"]
+    SEED["teams players agent_pools results<br/>agents maps agent_map"]
+    MX["matrix_edges<br/>confidence + note per edge"]
+    W["weights (adjustable)"]
+  end
+
+  VLLM["local vLLM :8890<br/>qwen3.8-flash-next"]
+  STATIC["valorant-api.com<br/>build-time fetch only"]
+
+  UI -- "REST JSON /api/* (stateless draft replay)" --> ROUTERS
+  STORE --> SEED
+  STORE --> MX
+  ROUTERS --> W
+  GUARD -- "OpenAI-compatible, no key" --> VLLM
+  STATIC -- "scripts/fetch_static.py" --> SEED
+  SEEDCSV["seed CSVs scripts/load_seed.py"] --> SEED
+  VLLM -. "offline -> available:false, app fully works" .-> LLM

@@ -1,0 +1,171 @@
+{
+  "project": "gcradar",
+  "generated": "2026-11-18",
+  "notes": "Waves are derivable from deps (wave = 1 + max(dep waves)). Files within a wave are disjoint. T5 replaces the llm.py stub T2 creates (sequential, deps enforce order). All verify steps are headless: pytest / TestClient / npm build+vitest. Browser checks are orchestrator-gate only.",
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "SQLite schema + curated seed dataset + loader/integrity checks",
+      "role": "database",
+      "deps": [],
+      "files": [
+        "app/backend/app/db/schema.sql",
+        "app/backend/app/db/seed/teams.csv",
+        "app/backend/app/db/seed/players.csv",
+        "app/backend/app/db/seed/agents.csv",
+        "app/backend/app/db/seed/maps.csv",
+        "app/backend/app/db/seed/agent_pools.csv",
+        "app/backend/app/db/seed/agent_map.csv",
+        "app/backend/app/db/seed/results.csv",
+        "app/backend/app/db/seed/matrix_edges.csv",
+        "app/backend/app/db/seed/weights.csv",
+        "app/backend/app/db/seed/archetypes.csv",
+        "app/backend/app/db/seed/archetype_agents.csv",
+        "app/backend/scripts/load_seed.py",
+        "app/backend/scripts/check_seed.py",
+        "app/backend/tests/test_seed.py"
+      ],
+      "spec": "Create schema.sql EXACTLY as the DDL in plan/architecture.md section 3. Author seed CSVs (header row, columns match table): 10-12 GC teams from the candidate list in section 9 (verify current rosters before entry), 5-7 players/team, 6-10 agent_pools rows/team with tier+pick_rate, >=6 results/team from real GC events (hand-entered public facts), 24-26 agents with roles, 7 maps, >=200 matrix_edges each with score in [-1,1], confidence in [0,1] and NON-EMPTY note, agent_map rows for every agent x map, 5 weights rows (role,synergy,counter,map,threat; defaults 1.0,1.0,1.0,0.6,0.8), 3-4 archetypes. load_seed.py: deletes+recreates data/gcradar.db from schema.sql, bulk-inserts all CSVs, exits 0. check_seed.py: asserts counts (teams 10-12, players>=70, edges>=200, every edge note non-empty, every team >=6 results, agent_map covers all agents x 7 maps) and PRAGMA foreign_key_check is empty; exits nonzero with a printed table on failure. No network at runtime.",
+      "verify": "cd app/backend && python scripts/load_seed.py && python scripts/check_seed.py && python -m pytest tests/test_seed.py -q  (all exit 0)"
+    },
+    {
+      "id": "T2",
+      "title": "FastAPI core: app factory, config, db connection, health, catalog routes, static fetch",
+      "role": "backend",
+      "deps": ["T1"],
+      "files": [
+        "app/backend/app/main.py",
+        "app/backend/app/config.py",
+        "app/backend/app/db/connection.py",
+        "app/backend/app/routers/__init__.py",
+        "app/backend/app/routers/system.py",
+        "app/backend/app/routers/catalog.py",
+        "app/backend/app/services/__init__.py",
+        "app/backend/app/services/llm.py",
+        "app/backend/scripts/fetch_static.py",
+        "app/backend/requirements.txt",
+        "app/backend/pytest.ini",
+        "app/backend/tests/conftest.py",
+        "app/backend/tests/test_system.py",
+        "app/backend/tests/test_catalog.py"
+      ],
+      "spec": "config.py: env GCRADAR_DB (default app/backend/data/gcradar.db), GCRADAR_LLM_URL (default http://100.124.134.63:8890/v1), GCRADAR_LLM_MODEL (default qwen3.8-flash-next), port 8401. connection.py: get_conn() stdlib sqlite3 with row_factory=sqlite3.Row, foreign_keys ON. main.py: create_app() factory, CORS allow http://localhost:8402, include routers, uvicorn entry on 8401. system.py: GET /api/health -> {status:'ok', llm:{online,model,checked_at}} using llm.probe(). catalog.py: GET /api/agents, GET /api/maps from tables. services/llm.py STUB (T5 replaces it): probe()->dict returns {'online':False,'model':config model,'checked_at':iso} and a raise NotImplementedError for complete(); keeps app LLM-offline by default. fetch_static.py: one-time build-time script (NOT imported by app) fetching https://valorant-api.com/v1/agents?language=en-US and /v1/maps, writing ONLY {code,name,role} / {code,name} to data/static/agents.json + maps.json; strip every asset URL; document that CSVs are generated from these by hand. requirements.txt: fastapi, uvicorn, httpx, pydantic, pytest. conftest.py: TestClient fixture over a temp db built from T1 schema+seed. Tests: health shape, agents count>=24, maps count=7.",
+      "verify": "cd app/backend && python -m pytest tests/test_system.py tests/test_catalog.py -q && python -c \"from app.main import create_app; assert create_app()\""
+    },
+    {
+      "id": "T3",
+      "title": "Deterministic analyzer: draft state machine + matrix scoring + matchup-conditioned ranking (TDD)",
+      "role": "backend",
+      "deps": [],
+      "files": [
+        "app/backend/app/analyzer/__init__.py",
+        "app/backend/app/analyzer/types.py",
+        "app/backend/app/analyzer/draft.py",
+        "app/backend/app/analyzer/matrix.py",
+        "app/backend/app/analyzer/roles.py",
+        "app/backend/app/analyzer/ranking.py",
+        "app/backend/tests/golden/fixture_small.json",
+        "app/backend/tests/golden/fixture_counter.json",
+        "app/backend/tests/golden/fixture_draft_flow.json",
+        "app/backend/tests/test_draft.py",
+        "app/backend/tests/test_matrix.py",
+        "app/backend/tests/test_ranking.py"
+      ],
+      "spec": "Implement plan/architecture.md section 4 EXACTLY: pure functions, no I/O, no DB imports. types.py dataclasses Edge/AgentMeta/PoolEntry/Weights/Action/DraftState. draft.py: PHASE_SCRIPT constant (side A; bans B,A,B,A,B,A; picks A,B,B,A,A,B,B,A; bans B,A; picks B,A), replay(actions)->DraftState with legality errors per section 4.1. matrix.py/roles.py: role_coverage, synergy, counter_vs, map_fit, threat with the exact formulas and ranges of section 4.2; comp_score with normalized terms and echoed weights. ranking.py: counter_pick_ranking top-5 with reason chains (top-3 contributing edges with confidence+note, threat fact, role_need fact). WRITE GOLDEN FIXTURES FIRST with hand-computed expected values (comp_score to 4 decimal places; fixture_draft_flow has one full legal 18-action draft and 4 illegal-action cases: wrong turn, re-pick, banned-then-picked, post-complete action), then code until pytest passes. Zero network, zero DB.",
+      "verify": "cd app/backend && python -m pytest tests/test_draft.py tests/test_matrix.py tests/test_ranking.py -q  (green against hand-computed golden fixtures)"
+    },
+    {
+      "id": "T4",
+      "title": "API wiring: store loader + teams/matchup/draft/comp/weights/matrix endpoints",
+      "role": "backend",
+      "deps": ["T1", "T2", "T3"],
+      "files": [
+        "app/backend/app/services/store.py",
+        "app/backend/app/routers/teams.py",
+        "app/backend/app/routers/matchup.py",
+        "app/backend/app/routers/draft.py",
+        "app/backend/app/routers/comp.py",
+        "app/backend/app/routers/weights.py",
+        "app/backend/app/routers/matrix.py",
+        "app/backend/tests/test_api_teams.py",
+        "app/backend/tests/test_api_matchup.py",
+        "app/backend/tests/test_api_draft.py",
+        "app/backend/tests/test_api_comp.py",
+        "app/backend/tests/test_api_weights.py"
+      ],
+      "spec": "store.py: load_edges/load_agents/load_pool/load_weights(db)->analyzer types (T3 types), cached per-connection. Implement the section 5 API contract EXACTLY (paths, request/response shapes): GET /api/teams (with W/L record from results), GET /api/teams/{id}, GET /api/teams/{id}/form, GET /api/matchup?team_a=&team_b= (overlap, ban_pressure via analyzer.threat against opponent pool, role_gaps, matrix_summary), POST /api/draft/score (stateless: body {map_code,team_a_id,team_b_id,actions,weights?}; replay + comp_score both teams + counter_pick_ranking for the next actor AND the other team; weights override defaults when sent; response includes weights_used), GET/PUT /api/weights (PUT validates keys in the 5-key set and values 0..2, persists to weights table), POST /api/comp/analyze, GET /api/matrix?agent=. All numbers come from T3 analyzer only. 404 unknown team ids. Tests via TestClient: teams list shape, matchup overlap correctness on seeded data, full legal draft replay scores >0 and counterpicks have non-empty reasons, illegal action -> legality.ok=false with error string, PUT weights changes a comp_score on the same input (transparency proof).",
+      "verify": "cd app/backend && python -m pytest tests/test_api_teams.py tests/test_api_matchup.py tests/test_api_draft.py tests/test_api_comp.py tests/test_api_weights.py -q"
+    },
+    {
+      "id": "T5",
+      "title": "LLM narration layer: vLLM client, semaphore, JSON schemas, novel-number guard, offline degrade",
+      "role": "ai",
+      "deps": ["T2", "T4"],
+      "files": [
+        "app/backend/app/services/llm.py",
+        "app/backend/app/services/llm_guard.py",
+        "app/backend/app/routers/ai.py",
+        "app/backend/tests/test_llm_guard.py",
+        "app/backend/tests/test_ai.py"
+      ],
+      "spec": "REPLACE the T2 stub llm.py (keep probe() signature so system.py keeps working): httpx.AsyncClient to config GCRADAR_LLM_URL chat/completions, model qwen3.8-flash-next, no key, asyncio.Semaphore(1), timeout 12s, no retry; probe() caches GET /models result 30s. llm_guard.py: novel_numbers_guard(context_json:str, output:str)->list[str] per section 6 (regex numeric tokens; any output number absent from context = reject). ai.py router: POST /api/ai/narrate {kind:dossier|draft|bullets, id} builds context JSON ONLY from T4 deterministic payloads (server-side; client sends no facts), system prompt per section 6, response_format json_object, pydantic-validate output per kind, run guard, then 200 {available:true,text} or 200 {available:false,reason:model_offline|guard_rejected|bad_output}. POST /api/ai/qa {question,scope} same contract with cites:[stat_keys]. NEVER a 5xx when LLM is down; never a number the deterministic layer did not compute. Tests: MockTransport for online/offline/timeout/garbage/guard-hit; assert narrate returns available:false (not 500) in all failure modes; one @pytest.mark.live test hitting real vLLM skipped when unreachable.",
+      "verify": "cd app/backend && python -m pytest tests/test_llm_guard.py tests/test_ai.py -q && python -m pytest tests/test_ai.py -q -m live --co 2>/dev/null; curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8401/api/ai/narrate -H 'content-type: application/json' -d '{\"kind\":\"dossier\",\"id\":1}'  # run backend with GCRADAR_LLM_URL=http://127.0.0.1:9 (dead) -> expect 200"
+    },
+    {
+      "id": "T6",
+      "title": "Frontend scaffold + Hub + Team Dossier + SVG chart kit (contract-driven)",
+      "role": "frontend",
+      "deps": [],
+      "files": [
+        "app/frontend/package.json",
+        "app/frontend/package-lock.json",
+        "app/frontend/vite.config.ts",
+        "app/frontend/tsconfig.json",
+        "app/frontend/index.html",
+        "app/frontend/src/main.tsx",
+        "app/frontend/src/App.tsx",
+        "app/frontend/src/routes.tsx",
+        "app/frontend/src/api/client.ts",
+        "app/frontend/src/api/types.ts",
+        "app/frontend/src/fixtures/teams.json",
+        "app/frontend/src/fixtures/dossier.json",
+        "app/frontend/src/components/Layout.tsx",
+        "app/frontend/src/components/charts/BarChart.tsx",
+        "app/frontend/src/components/charts/Sparkline.tsx",
+        "app/frontend/src/components/charts/TierGrid.tsx",
+        "app/frontend/src/components/ai/AiPanel.tsx",
+        "app/frontend/src/pages/Hub.tsx",
+        "app/frontend/src/pages/Dossier.tsx",
+        "app/frontend/src/pages/Matchup.tsx",
+        "app/frontend/src/pages/Draft.tsx",
+        "app/frontend/src/pages/CompLab.tsx",
+        "app/frontend/src/styles/tokens.css",
+        "app/frontend/src/styles/app.css",
+        "app/frontend/src/tests/charts.test.ts"
+      ],
+      "spec": "Vite + React 18 + TS. vite.config.ts: server.port 8402, proxy /api -> http://localhost:8401. Deps ONLY react, react-dom, react-router-dom (+dev: typescript, vitest, @vitejs/plugin-react). api/types.ts: TS types mirroring the section 5 contract EXACTLY (single source for all frontend tasks). api/client.ts: typed fetch wrappers for every endpoint; AiPanel.tsx: calls /api/ai/narrate, renders text when available:true, renders an explicit 'model offline' placeholder card when available:false (never an error state). routes.tsx: 5 routes per section 8. Matchup.tsx/Draft.tsx/CompLab.tsx are minimal placeholder pages (T7 replaces them). Hub.tsx: team grid from /api/teams with fixtures fallback when API is down (dev mode). Dossier.tsx: roster table, TierGrid (agent x tier), Sparkline form from /api/teams/{id}/form, AiPanel dossier blurb. Hand-rolled SVG charts only (no chart libs); original design tokens in tokens.css (no Riot/team logos, text tags only). charts.test.ts: vitest on pure scale/layout helpers.",
+      "verify": "cd app/frontend && npm install && npm run build && npm test  (tsc clean, vite build ok, vitest green)"
+    },
+    {
+      "id": "T7",
+      "title": "Frontend Matchup + Draft Board + Comp Lab + Explain/Weights panel",
+      "role": "frontend",
+      "deps": ["T6"],
+      "files": [
+        "app/frontend/src/pages/Matchup.tsx",
+        "app/frontend/src/pages/Draft.tsx",
+        "app/frontend/src/pages/CompLab.tsx",
+        "app/frontend/src/components/draft/PickBanBoard.tsx",
+        "app/frontend/src/components/draft/ScoreBar.tsx",
+        "app/frontend/src/components/draft/ReasonChain.tsx",
+        "app/frontend/src/components/weights/ExplainPanel.tsx",
+        "app/frontend/src/components/matchup/OverlapView.tsx",
+        "app/frontend/src/components/matchup/BanPressure.tsx",
+        "app/frontend/src/tests/draftBoard.test.ts",
+        "app/frontend/src/tests/explain.test.ts"
+      ],
+      "spec": "Server contract consumed ONLY via T6's src/api/types.ts (T4's section 5 shapes); live integration is verified at the orchestrator gate, not by this task. REPLACE the three T6 placeholder pages (keep routes.tsx untouched). Matchup.tsx: two team pickers -> GET /api/matchup; OverlapView (shared agents with tier badges), BanPressure (threat-sorted bars with reason text), role-gap chips. Draft.tsx: team/map/side setup -> local action list (client appends side/ban/pick actions, sends FULL list to POST /api/draft/score each click, renders returned state/legality/scores/counterpicks; illegal action shows server error string and reverts the click); PickBanBoard renders 8 ban slots + 10 pick slots from PHASE order in the response; ScoreBar shows comp_score breakdown per team; ReasonChain renders RankedPick reasons with confidence bars; AiPanel draft-rationale panel (offline-safe). ExplainPanel.tsx: sliders for the 5 weights (0..2) -> PUT /api/weights and re-scores live; shows weights_used echoed by server (the transparency demo beat). CompLab.tsx: 5 agent pickers + map + optional opponent -> POST /api/comp/analyze breakdown + archetype tags when present. draftBoard.test.ts: vitest on the pure action-list builder/phase-advance helper (no DOM browser); explain.test.ts: weight->requery logic.",
+      "verify": "cd app/frontend && npm run build && npm test  (tsc clean, vite build ok, vitest green)"
+    }
+  ]
+}

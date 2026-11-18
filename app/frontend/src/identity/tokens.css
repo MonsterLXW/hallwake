@@ -1,0 +1,19 @@
+/* Placeholder identity tokens — hf-design replaces this file wholesale
+   in phase 6 (design-brief mode). Do not hardcode design values elsewhere. */
+:root {
+  --color-bg: #ffffff;
+  --color-fg: #111111;
+  --color-accent: #111111;
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-body: system-ui, sans-serif;
+  --font-mono: ui-monospace, Consolas, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 40px;
+  --space-6: 64px;
+  --radius: 0px;
+  --shadow: none;
+  --motion: 180ms cubic-bezier(0.2, 0, 0, 1);
+}

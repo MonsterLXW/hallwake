@@ -1,0 +1,34 @@
+{
+  "name": "Cloud9 x JetBrains: Sky's The Limit Hackathon 2026",
+  "slug": "fresh-nov-2026",
+  "source": "Operator directive 2026-11-18: start fresh; Phase 1 discovered the target competition",
+  "created": "2026-11-18",
+  "ports": { "backend": 8401, "frontend": 8402 },
+  "llm": {
+    "url": "http://100.124.134.63:8890/v1",
+    "model": "qwen3.8-flash-next",
+    "engine": "local vLLM, OpenAI-compatible, no key",
+    "note": "NEVER suggest a paid API. trycloudflare llama.cpp fallback in research/brief.md is ephemeral — demo evidence = video + repo."
+  },
+  "constraint": "ONE agent at a time — never dispatch parallel agents (operator directive 2026-11-18)",
+  "infra_lessons_carried": [
+    "hf-* UI agents must NOT open Playwright MCP mid-task (context overflow) — browser verification is centralized by the orchestrator at gates",
+    "verify every agent's artifacts on disk with Read/Glob before marking a phase done"
+  ],
+  "phases": {
+    "1": { "status": "done", "note": "Cloud9 x JetBrains Sky's The Limit, deadline Jan 12 2027, 245 entrants, 5x0.2 rubric after pass/fail theme+tool gate", "artifacts": ["research/brief.json", "research/brief.md", "research/notes.md"] },
+    "2": { "status": "done", "note": "GO; recommended category 1 VALORANT tactical scouting; risks: GRID spike, demo-URL vs local LLM (app works LLM-down), Stage One kill-list (.idea evidence, no Riot art, LICENSE, fresh repo, register for JetBrains codes)", "artifacts": ["research/opportunity.md"] },
+    "3": { "status": "done", "note": "16 ideas verified; top: ReadTheRound 80, LineupLab 76, GCRadar 76, CompIQ 74, PatchDelta 72", "artifacts": ["research/ideas.json", "research/ideas.md"] },
+    "4": { "status": "done", "note": "winner GCRadar+CompIQ graft, expected 80 (raw 84); runner-up LineupLab 74; kill-risks: thin GC seed data, matrix subjectivity, scope creep (5-screen cap, analyzer never cut)", "artifacts": ["plan/idea.md"] },
+    "5": { "status": "done", "note": "7 tasks / 4 waves, acyclic verified by orchestrator; stack FastAPI+stdlib sqlite3 / Vite+React+TS, hand-rolled SVG charts, no realtime; riskiest T3 analyzer (hand-computed golden fixtures first)", "artifacts": ["plan/architecture.md", "plan/architecture.mmd", "plan/tasks.json", "plan/roadmap.md"] },
+    "6": { "status": "running", "note": "orchestrator scaffolding; hf-design to follow", "artifacts": [] },
+    "7": { "status": "pending", "note": "", "artifacts": [] },
+    "8": { "status": "pending", "note": "", "artifacts": [] },
+    "9": { "status": "pending", "note": "", "artifacts": [] },
+    "10": { "status": "pending", "note": "", "artifacts": [] },
+    "11": { "status": "pending", "note": "", "artifacts": [] },
+    "12": { "status": "pending", "note": "", "artifacts": [] }
+  },
+  "current_phase": 6,
+  "selected_idea": "GCRadar — Game Changers Scouting Hub & Composition Analyzer (Cat 1; GCRadar shell + CompIQ draft-analyzer graft; deterministic core, local-LLM narration only; 5-screen cap)"
+}

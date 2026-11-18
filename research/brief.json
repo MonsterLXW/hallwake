@@ -1,0 +1,53 @@
+{
+  "name": "Cloud9 x JetBrains: Sky's The Limit Hackathon 2026",
+  "url": "https://cloud9.devpost.com/",
+  "deadline": "Jan 12, 2027 @ 11:00am PST (submission period Nov 17, 2026 - Jan 12, 2027)",
+  "sponsor": "Cloud9 (esports org) + JetBrains; managed by Devpost",
+  "prizes": {
+    "total_cash": "$25,000",
+    "per_category": "Winner $6,000 cash + paid GDC trip + 1yr JetBrains All Products Pack + $100 Cloud9 gift card; Runner-up $2,000 cash + JetBrains sub",
+    "categories": 3,
+    "bonus": "Best AI-Powered Workflow Story (amount not captured - gap)"
+  },
+  "eligibility": {
+    "solo": true,
+    "age": "Above legal age of majority in country of residence",
+    "countries": "All except standard exceptions; rules name Brazil, Quebec, Russia, Crimea, Cuba, Iran, North Korea, US-sanctioned territories",
+    "teams": "Individuals, teams, and organizations all allowed"
+  },
+  "judging": [
+    { "criterion": "Technological Implementation (thoroughness/skill of JetBrains tool use; working non-trivial implementation)", "weight": 0.2 },
+    { "criterion": "Design (complete coherent product experience)", "weight": 0.2 },
+    { "criterion": "Potential Impact (credible case for a real audience)", "weight": 0.2 },
+    { "criterion": "Quality of the Idea (creativity/novelty)", "weight": 0.2 },
+    { "criterion": "Presentation (video shows end-to-end working project)", "weight": 0.2 }
+  ],
+  "judging_note": "Official rules: Stage One pass/fail (theme fit + reasonable application of required JetBrains tools), Stage Two equally weighted 5 criteria (0.2 each, verbatim 'equally weighted criteria').",
+  "requirements": [
+    "Build or significantly update a working project using at least one JetBrains tool (IntelliJ IDEA, PyCharm, WebStorm, Rider, DataGrip, JetBrains Air, or AI Coding Agent Junie); registrants get free All Products Pack + AI Ultimate codes while supplies last",
+    "Enter one category: (1) VALORANT/Game Changers tactical scouting, utility placement & operator profiler; (2) League of Legends macro scouting & draft management; (3) event mini game playable at a Cloud9 booth (Rider recommended)",
+    "Project new, or if pre-existing significantly updated after Nov 17, 2026 (UX-changing updates only)",
+    "Public open-source repo (GitHub/GitLab/Bitbucket) with detectable license, all source/assets/run instructions; commit .idea/.junie/.air folder as tool-use evidence",
+    "Text description explaining features and demonstrating JetBrains tool use",
+    "Working demo URL (web) or judge-accessible build with install instructions",
+    "Demo video <3 minutes, publicly visible on YouTube, showing the project running on its target device",
+    "Methodology write-up (approach + how the tool solves the category problem)",
+    "All materials in English (or translated)",
+    "Original work, solely owned by entrant; open source OK if you build on top of it",
+    "GRID official esports data available but optional for every category",
+    "Riot-title-inspired projects must follow Riot developer policies; games must use original names/artwork/assets, not recreate Riot content"
+  ],
+  "bans": [
+    "No third-party trademarks, copyrighted music, or material in the video without permission",
+    "No projects developed with financial/preferential support from sponsor/promotion entities",
+    "No recreating Riot Games content (original names/assets required in games)",
+    "Residents of named excluded regions ineligible (Brazil, Quebec, Russia, Crimea, Cuba, Iran, North Korea, sanctioned countries)",
+    "No required cloud/paid LLM API anywhere in the rules - app inference may be fully local (fits local vLLM constraint)"
+  ],
+  "competition_level": "245 participants (very low vs 1,000-16,000 at other live AI hackathons)",
+  "gaps": [
+    "Bonus prize dollar amount not extracted",
+    "Sponsor-employee exclusion clause not explicitly seen in fetched rules text (Devpost standard exceptions likely apply) - re-read full rules before submitting",
+    "Operator's country of residence unknown - verify not in excluded-territory list"
+  ]
+}
