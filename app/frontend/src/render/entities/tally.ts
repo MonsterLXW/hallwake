@@ -33,12 +33,14 @@ export function buildTally(fakeNum: number): EntityVisual<TallyState> {
   glow.position.set(-1.05, 1.5, 0.01);
   glow.rotation.y = Math.PI;
 
-  const fakeMat = new THREE.MeshBasicMaterial({ map: getNumeralTexture(fakeNum) });
+  // fakeDoor + jambs are a freestanding door, not a wall decal: DoubleSide so
+  // the mouth-door stays legible from any angle the player circles it at.
+  const fakeMat = new THREE.MeshBasicMaterial({ map: getNumeralTexture(fakeNum), side: THREE.DoubleSide });
   const fakeDoor = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.1), fakeMat);
   fakeDoor.position.set(3.5, 1.05, -0.18); // FAKE_DOOR_POS, room-local
   fakeDoor.rotation.y = Math.PI;
 
-  const jambMat = new THREE.MeshBasicMaterial({ color: 0x3C3C4A }); // rule-strong
+  const jambMat = new THREE.MeshBasicMaterial({ color: 0x3C3C4A, side: THREE.DoubleSide }); // rule-strong
   const jambL = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 2.24), jambMat);
   jambL.position.set(3.5 - 0.78, 1.05, -0.17);
   jambL.rotation.y = Math.PI;

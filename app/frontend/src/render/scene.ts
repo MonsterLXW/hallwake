@@ -34,7 +34,7 @@ export interface SceneBundle {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   entityHost: THREE.Group; // T3 mounts entity meshes here
-  update(sim: SimState, events: SimEvent[], nowSec: number): void;
+  update(sim: SimState, events: SimEvent[], nowSec: number, pitch?: number): void;
   resize(): void;
   dispose(): void;
 }
@@ -65,11 +65,19 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(cBg, preset.fogDensity);
 
+  // Ambient fill: a dim bone wash so walls/props read faintly outside the
+  // lantern cone. Without it MeshLambert surfaces outside the spot are pure
+  // black and the corridor is unnavigable. Kept low to preserve the horror
+  // mood — the lantern still carves the focal pool of light.
+  const ambient = new THREE.AmbientLight(cBone, 0.26);
+  scene.add(ambient);
+
   const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 32);
+  camera.rotation.order = 'YXZ'; // yaw then pitch, FPS-style (no roll when looking up)
   scene.add(camera);
 
   // --- the single dynamic lantern -----------------------------------------
-  const lantern = new THREE.SpotLight(cWarm, 2.2, 8, 1.05, 0.55, 1.2);
+  const lantern = new THREE.SpotLight(cWarm, 3.0, 8, 1.25, 0.6, 1.0);
   lantern.position.set(0, -0.1, 0);
   lantern.target.position.set(0, -0.15, -1);
   camera.add(lantern);
@@ -119,7 +127,7 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
   let gauntFlickerUntil = 0;
   let tallyGlowUntil = 0;
 
-  function update(sim: SimState, events: SimEvent[], nowSec: number): void {
+  function update(sim: SimState, events: SimEvent[], nowSec: number, pitch = 0): void {
     const dt = Math.min(0.1, nowSec - lastNow || 0);
     lastNow = nowSec;
 
@@ -145,7 +153,7 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
     bobPhase += speed * dt * 4.2;
     const bob = reducedMotion ? 0 : Math.sin(bobPhase) * 0.045 * (speed / 2.2);
     camera.position.set(sim.player.x, EYE + bob, sim.player.z);
-    camera.rotation.set(0, sim.player.yaw + Math.PI, 0);
+    camera.rotation.set(pitch, sim.player.yaw + Math.PI, 0); // YXZ: yaw then pitch (lantern is a camera child, so the beam tilts with the view)
 
     // --- lantern: radius is oil, color/flicker is the tell channel ----------
     const gaunt = sim.entities.find((e) => e.kind === 'GAUNT');
@@ -155,7 +163,7 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
     const cinderLive = !!cinder && (cinder.phase === 'TELL' || cinder.phase === 'BLACKOUT');
 
     lantern.distance = lanternRadius(sim.oil) * preset.lanternScale;
-    let intensity = 1.4 + 1.2 * sim.oil;
+    let intensity = 2.6 + 1.8 * sim.oil;
     scratchColor.set(cWarm);
     if (gauntLive) {
       scratchColor.set(cGaunt); // sodium amber: GAUNT owns amber (brief §3)

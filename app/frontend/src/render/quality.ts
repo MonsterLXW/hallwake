@@ -15,9 +15,9 @@ export interface QualityPreset {
 }
 
 export const QUALITY: Record<Quality, QualityPreset> = {
-  low: { lanternScale: 0.7, fogDensity: 0.14, wallPx: 256, propPx: 128, eventLights: 1 },
-  mid: { lanternScale: 1.0, fogDensity: 0.1, wallPx: 512, propPx: 256, eventLights: 1 },
-  high: { lanternScale: 1.0, fogDensity: 0.09, wallPx: 512, propPx: 256, eventLights: 2 },
+  low: { lanternScale: 0.85, fogDensity: 0.085, wallPx: 256, propPx: 128, eventLights: 1 },
+  mid: { lanternScale: 1.15, fogDensity: 0.055, wallPx: 512, propPx: 256, eventLights: 1 },
+  high: { lanternScale: 1.2, fogDensity: 0.05, wallPx: 512, propPx: 256, eventLights: 2 },
 };
 
 export function parseQuality(v: string | null | undefined): Quality {

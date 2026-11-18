@@ -212,12 +212,16 @@ export function createSharedMaterials(quality: Quality): SharedMaterials {
   return {
     staticMat: new THREE.MeshLambertMaterial({ map: wallTex, vertexColors: true }),
     propsMat: new THREE.MeshLambertMaterial({ map: wallTex, vertexColors: true }),
-    sconceMat: new THREE.MeshBasicMaterial({ map: getEmissiveTexture('sconce') }),
-    alcoveMat: new THREE.MeshBasicMaterial({ map: getEmissiveTexture('alcove') }),
+    // Quads are flat planes; DoubleSide so sconces/alcoves/AO never vanish when
+    // the player turns around or views them from behind (walls/props are solid
+    // boxes and stay FrontSide).
+    sconceMat: new THREE.MeshBasicMaterial({ map: getEmissiveTexture('sconce'), side: THREE.DoubleSide }),
+    alcoveMat: new THREE.MeshBasicMaterial({ map: getEmissiveTexture('alcove'), side: THREE.DoubleSide }),
     aoMat: new THREE.MeshBasicMaterial({
       map: getEmissiveTexture('ao'),
       transparent: true,
       depthWrite: false,
+      side: THREE.DoubleSide,
     }),
   };
 }
@@ -241,7 +245,7 @@ function shadeByHeight(geo: THREE.BufferGeometry): void {
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i);
     const t = Math.min(1, Math.max(0, y / ROOM_H));
-    const s = 0.5 + 0.5 * Math.sin(Math.PI * Math.min(1, t * 1.15));
+    const s = 0.66 + 0.34 * Math.sin(Math.PI * Math.min(1, t * 1.15));
     colors[i * 3] = s;
     colors[i * 3 + 1] = s;
     colors[i * 3 + 2] = s;
@@ -303,7 +307,7 @@ export function buildRoomGroup(plan: RoomPlan, quality: Quality, mats: SharedMat
   group.add(new THREE.Mesh(propsMerged, mats.propsMat));
 
   // --- DoorMesh (stenciled numeral, always legible: unlit basic material) ---
-  const doorMat = new THREE.MeshBasicMaterial({ map: getNumeralTexture(plan.door) });
+  const doorMat = new THREE.MeshBasicMaterial({ map: getNumeralTexture(plan.door), side: THREE.DoubleSide });
   const dq = plan.doorQuad;
   const doorMesh = new THREE.Mesh(new THREE.PlaneGeometry(dq.w, dq.h), doorMat);
   doorMesh.position.set(dq.x, dq.y, dq.z);

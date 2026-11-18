@@ -230,7 +230,8 @@ export function startLoop(deps: LoopDeps): LoopHandle {
       if (acc > DT * MAX_CATCHUP_STEPS) acc = 0; // drop the backlog, never spiral
     }
 
-    deps.scene.update(sim, events, t / 1000);
+    const pitch = autopilot ? 0 : deps.controller.lookPitch;
+    deps.scene.update(sim, events, t / 1000, pitch);
     entityHost.update(sim, events, t / 1000); // meshes + audio dispatch (T3)
     if (deps.onEvent) for (const e of events) deps.onEvent(e);
     events.length = 0;

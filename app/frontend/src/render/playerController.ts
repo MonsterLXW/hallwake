@@ -15,10 +15,24 @@ export interface ControllerHooks {
 const LOOK_SENS = 0.0024; // rad per px of mouse movement
 const STICK_LOOK = 0.05; // rad per tick at full right-stick deflection
 const DEADZONE = 0.15;
+const PITCH_LIMIT = Math.PI / 2 - 0.05; // never let the camera flip over
+
+const clampPitch = (v: number): number => (v < -PITCH_LIMIT ? -PITCH_LIMIT : v > PITCH_LIMIT ? PITCH_LIMIT : v);
+
+// Rotate camera-relative intent (fwd, str) into world axes for the sim.
+// yaw 0 faces +z (north); the camera (rotation.y = yaw+PI) has screen-right =
+// world (-cos yaw, sin yaw) and screen-forward = world (sin yaw, cos yaw).
+// strafe-right (D, str>0) MUST map to screen-right, or left/right invert.
+export function rotateIntent(fwd: number, str: number, yaw: number): { mx: number; mz: number } {
+  const s = Math.sin(yaw);
+  const c = Math.cos(yaw);
+  return { mx: s * fwd - c * str, mz: c * fwd + s * str };
+}
 
 export class PlayerController {
   private keys = new Set<string>();
   private yawDelta = 0;
+  private pitch = 0; // view-only vertical look; never enters the sim (movement stays axis-aligned)
   private interactEdge = false;
   private prevPadInteract = false;
   private locked = false;
@@ -31,6 +45,12 @@ export class PlayerController {
 
   get isLocked(): boolean {
     return this.locked;
+  }
+
+  /** View-only vertical look (radians, clamped). The loop feeds this to the
+      camera; it is deliberately NOT part of the sim, so movement stays pure. */
+  get lookPitch(): number {
+    return this.pitch;
   }
 
   attach(): void {
@@ -74,6 +94,8 @@ export class PlayerController {
   private onMouseMove = (e: MouseEvent): void => {
     if (!this.locked) return;
     this.yawDelta += e.movementX * LOOK_SENS;
+    // moving the mouse up (movementY < 0) looks up (+pitch)
+    this.pitch = clampPitch(this.pitch - e.movementY * LOOK_SENS);
   };
 
   private onLockChange = (): void => {
@@ -95,6 +117,7 @@ export class PlayerController {
       fwd += pad.fwd;
       str += pad.str;
       this.yawDelta += pad.yawD;
+      this.pitch = clampPitch(this.pitch - pad.pitchD); // stick up (axes[3]<0) looks up
       if (pad.interact && !this.prevPadInteract) this.interactEdge = true;
       this.prevPadInteract = pad.interact;
     } else {
@@ -106,11 +129,9 @@ export class PlayerController {
       fwd /= mag;
       str /= mag;
     }
-    // rotate camera-relative intent into world axes (yaw 0 faces +z / north)
-    const s = Math.sin(yaw);
-    const c = Math.cos(yaw);
-    f.mx = s * fwd + c * str;
-    f.mz = c * fwd - s * str;
+    const m = rotateIntent(fwd, str, yaw);
+    f.mx = m.mx;
+    f.mz = m.mz;
     f.yawD = this.yawDelta;
     this.yawDelta = 0;
     f.interact = this.interactEdge;
@@ -118,7 +139,7 @@ export class PlayerController {
     return f;
   }
 
-  private pollGamepad(): { fwd: number; str: number; yawD: number; interact: boolean } | null {
+  private pollGamepad(): { fwd: number; str: number; yawD: number; pitchD: number; interact: boolean } | null {
     if (typeof navigator === 'undefined' || !navigator.getGamepads) return null;
     const pads = navigator.getGamepads();
     const gp = pads && pads[0];
@@ -128,6 +149,7 @@ export class PlayerController {
       fwd: -dz(gp.axes[1] ?? 0),
       str: dz(gp.axes[0] ?? 0),
       yawD: dz(gp.axes[2] ?? 0) * STICK_LOOK,
+      pitchD: dz(gp.axes[3] ?? 0) * STICK_LOOK,
       interact: !!(gp.buttons[0]?.pressed || gp.buttons[2]?.pressed), // A / X
     };
   }
