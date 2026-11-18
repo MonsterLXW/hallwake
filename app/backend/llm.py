@@ -2,7 +2,8 @@
 
 The ONE inference backend: local vLLM, OpenAI-compatible, no key.
 Never add paid cloud APIs. Hard 0.8 s timeout, NO retries, one request at
-a time (asyncio.Semaphore(1)); ANY failure returns None so callers fall
+a time (asyncio.Semaphore(1)); while the slot is busy new calls return
+None immediately (never queued); ANY failure returns None so callers fall
 back to canned text — the game is 100% playable with the LLM down.
 
 Live-probe note (2026-11-18, real endpoint): qwen3.8-flash-next is a
@@ -39,6 +40,11 @@ async def chat(messages, max_tokens=80, temperature=0.8, timeout=TIMEOUT_S):
         "chat_template_kwargs": {"enable_thinking": False},
     }
     try:
+        if _SEMAPHORE.locked():
+            # Firewall busy: degrade to canned IMMEDIATELY. Never queue
+            # waiters on the semaphore — a flood of flavor POSTs must not
+            # pile up unbounded pending requests behind the 0.8 s slot.
+            return None
         async with _SEMAPHORE:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(f"{URL}/chat/completions", json=body)

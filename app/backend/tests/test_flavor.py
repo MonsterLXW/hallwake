@@ -158,6 +158,50 @@ def test_invalid_input_422(bad):
     assert r.json()["ok"] is False
 
 
+def test_busy_firewall_never_queues(monkeypatch):
+    """While one LLM call holds the semaphore, a concurrent call must return
+    None immediately (canned fallback) instead of queueing behind it."""
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return llm_payload("late flavor")
+
+    class HangingClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc_info):
+            return False
+
+        async def post(self, url, json=None):
+            started.set()
+            await release.wait()
+            return FakeResponse()
+
+    monkeypatch.setattr(llm.httpx, "AsyncClient", HangingClient)
+
+    async def scenario():
+        first = asyncio.create_task(llm.chat([{"role": "user", "content": "a"}]))
+        await asyncio.wait_for(started.wait(), timeout=2.0)
+        second = await asyncio.wait_for(
+            llm.chat([{"role": "user", "content": "b"}]), timeout=0.2)
+        release.set()
+        first_out = await asyncio.wait_for(first, timeout=2.0)
+        return second, first_out
+
+    second_out, first_out = asyncio.run(scenario())
+    assert second_out is None  # busy -> immediate degrade, no queueing
+    assert first_out == "late flavor"
+
+
 def test_canned_pick_deterministic_across_calls(monkeypatch):
     monkeypatch.setattr(llm.httpx, "AsyncClient",
                         fake_async_client(exc=httpx.ConnectError("offline")))
