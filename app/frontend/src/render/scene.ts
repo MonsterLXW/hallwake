@@ -1,0 +1,236 @@
+// HALLWAKE — the Three.js scene (architecture.md §3). Thin consumer of
+// SimState: it never mutates sim state. One lantern SpotLight, at most two
+// event PointLights, zero shadow maps, exponential fog at the token black.
+// Only the current room + preloaded next room are alive. All colors come
+// from identity tokens at runtime (tokens.css is the single source).
+
+import * as THREE from 'three';
+import type { SimEvent, SimState } from '../core/types';
+import { lanternRadius } from '../core/oil';
+import { doorDef } from '../core/schedule';
+import { QUALITY, type Quality } from './quality';
+import {
+  buildRoomGroup,
+  createSharedMaterials,
+  disposeRoomGroup,
+  roomPlanFor,
+  type RoomMeshes,
+  type SharedMaterials,
+} from './roomBuilder';
+
+function tokenColor(name: string, fallback: string): number {
+  if (typeof document !== 'undefined' && typeof getComputedStyle === 'function') {
+    try {
+      const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      if (v) return parseInt(v.replace('#', ''), 16);
+    } catch {
+      /* fall through to the mirrored value */
+    }
+  }
+  return parseInt(fallback.slice(1), 16);
+}
+
+export interface SceneBundle {
+  scene: THREE.Scene;
+  camera: THREE.PerspectiveCamera;
+  entityHost: THREE.Group; // T3 mounts entity meshes here
+  update(sim: SimState, events: SimEvent[], nowSec: number): void;
+  resize(): void;
+  dispose(): void;
+}
+
+const EYE = 1.6;
+
+export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneBundle {
+  const preset = QUALITY[quality];
+  const cBg = tokenColor('--color-bg', '#0A0A0E');
+  const cBone = tokenColor('--color-ink', '#EDE7DA');
+  const cWarm = tokenColor('--oil-high', '#E3D7BC');
+  const cGaunt = tokenColor('--signal-gaunt', '#F2A63C');
+  const cTally = tokenColor('--signal-tally', '#D6574C');
+  const cCinder = tokenColor('--signal-cinder', '#58B4E8');
+
+  const reducedMotion =
+    typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: false,
+    powerPreference: 'high-performance',
+  });
+  renderer.shadowMap.enabled = false; // never, at any quality
+  renderer.setPixelRatio(Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, 1.5));
+  renderer.setClearColor(cBg, 1);
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(cBg, preset.fogDensity);
+
+  const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 32);
+  scene.add(camera);
+
+  // --- the single dynamic lantern -----------------------------------------
+  const lantern = new THREE.SpotLight(cWarm, 2.2, 8, 1.05, 0.55, 1.2);
+  lantern.position.set(0, -0.1, 0);
+  lantern.target.position.set(0, -0.15, -1);
+  camera.add(lantern);
+  camera.add(lantern.target);
+
+  // --- pooled event lights (<= 2, only while an event is live) -------------
+  const eventLights: { light: THREE.PointLight; until: number }[] = [];
+  for (let i = 0; i < preset.eventLights; i++) {
+    const light = new THREE.PointLight(cBone, 0, 9, 2);
+    light.visible = false;
+    scene.add(light);
+    eventLights.push({ light, until: 0 });
+  }
+
+  // --- rooms ---------------------------------------------------------------
+  const mats: SharedMaterials = createSharedMaterials(quality);
+  let currentDoor = 0;
+  let rooms: RoomMeshes[] = [];
+  const entityHost = new THREE.Group();
+  scene.add(entityHost);
+
+  function rebuildRooms(door: number): void {
+    for (const r of rooms) disposeRoomGroup(r);
+    rooms = [];
+    const cur = buildRoomGroup(roomPlanFor(doorDef(door)), quality, mats);
+    cur.group.position.z = 0;
+    scene.add(cur.group);
+    rooms.push(cur);
+    if (door < 24) {
+      const next = buildRoomGroup(roomPlanFor(doorDef(door + 1)), quality, mats);
+      next.group.position.z = 10; // preloaded corridor continuation
+      scene.add(next.group);
+      rooms.push(next);
+    }
+    currentDoor = door;
+  }
+
+  // --- scratch (no per-frame allocations) ----------------------------------
+  const scratchColor = new THREE.Color();
+  const litColor = new THREE.Color();
+  const dimColor = new THREE.Color();
+  const cinderColor = new THREE.Color(cCinder);
+  const offColor = new THREE.Color(0x050507);
+
+  let bobPhase = 0;
+  let lastNow = 0;
+  let gauntFlickerUntil = 0;
+  let tallyGlowUntil = 0;
+
+  function update(sim: SimState, events: SimEvent[], nowSec: number): void {
+    const dt = Math.min(0.1, nowSec - lastNow || 0);
+    lastNow = nowSec;
+
+    if (sim.door !== currentDoor) rebuildRooms(sim.door);
+
+    // transient tells from the event channel (flicker is information, §7)
+    for (const e of events) {
+      if (e.type === 'tell' && e.visible) {
+        if (e.entity === 'GAUNT') gauntFlickerUntil = nowSec + 0.36; // two 180ms blinks
+        if (e.entity === 'TALLY') tallyGlowUntil = nowSec + 1.0; // one red beat
+        if (e.entity === 'CINDER' || e.entity === 'GAUNT') {
+          const slot = eventLights.find((s) => s.until <= nowSec) ?? eventLights[0];
+          slot.light.visible = true;
+          slot.light.color.set(e.entity === 'CINDER' ? cCinder : cGaunt);
+          slot.light.position.set(sim.player.x, 2.2, sim.player.z + 2.5);
+          slot.until = nowSec + 2.0;
+        }
+      }
+    }
+
+    // --- camera rig + walk bob ---------------------------------------------
+    const speed = Math.hypot(sim.player.vel.x, sim.player.vel.z);
+    bobPhase += speed * dt * 4.2;
+    const bob = reducedMotion ? 0 : Math.sin(bobPhase) * 0.045 * (speed / 2.2);
+    camera.position.set(sim.player.x, EYE + bob, sim.player.z);
+    camera.rotation.set(0, sim.player.yaw + Math.PI, 0);
+
+    // --- lantern: radius is oil, color/flicker is the tell channel ----------
+    const gaunt = sim.entities.find((e) => e.kind === 'GAUNT');
+    const murmur = sim.entities.find((e) => e.kind === 'MURMUR');
+    const cinder = sim.entities.find((e) => e.kind === 'CINDER');
+    const gauntLive = !!gaunt && (gaunt.phase === 'TELL' || gaunt.phase === 'SWEEP');
+    const cinderLive = !!cinder && (cinder.phase === 'TELL' || cinder.phase === 'BLACKOUT');
+
+    lantern.distance = lanternRadius(sim.oil) * preset.lanternScale;
+    let intensity = 1.4 + 1.2 * sim.oil;
+    scratchColor.set(cWarm);
+    if (gauntLive) {
+      scratchColor.set(cGaunt); // sodium amber: GAUNT owns amber (brief §3)
+      if (!reducedMotion && nowSec < gauntFlickerUntil) {
+        const blink = Math.floor((nowSec * 1000 - (gauntFlickerUntil - 360)) / 180);
+        intensity *= blink % 2 === 0 ? 0.25 : 1.0;
+      }
+    } else if (cinderLive) {
+      scratchColor.lerp(cinderColor, 0.45); // spectral blue wash
+    }
+    if (murmur && murmur.phase === 'HUNT' && murmur.dist < 5) {
+      // MURMUR is hueless by design: its channel is luminance only — the
+      // beam sputters dim, it never wears a signal hue.
+      intensity *= reducedMotion ? 0.8 : 0.82 + 0.18 * Math.sin(nowSec * 23);
+    }
+    lantern.intensity = intensity;
+    lantern.color.copy(scratchColor);
+
+    // --- sconces: emissive instances, never lights --------------------------
+    const room = rooms[0];
+    if (room) {
+      litColor.set(cinderLive ? cCinder : cWarm);
+      dimColor.set(cBone).multiplyScalar(0.5);
+      for (let i = 0; i < room.sconceInst.count; i++) {
+        const lit = sim.sconces[i];
+        room.sconceInst.setColorAt(i, lit ? (cinderLive ? cinderColor : litColor) : offColor);
+      }
+      if (room.sconceInst.instanceColor) room.sconceInst.instanceColor.needsUpdate = true;
+
+      // --- door numeral tint + TALLY fake door ------------------------------
+      const tally = sim.entities.find((e) => e.kind === 'TALLY');
+      const tallyTell = !!tally && (tally.phase === 'TELL' || nowSec < tallyGlowUntil);
+      room.doorMat.color.set(tallyTell ? cTally : cBone);
+      if (room.fakeDoorMesh) room.fakeDoorMesh.visible = !!tally && tally.phase === 'FAKE';
+    }
+
+    // --- event light decay ---------------------------------------------------
+    for (const slot of eventLights) {
+      if (slot.until > nowSec) {
+        slot.light.intensity = 2.4 * ((slot.until - nowSec) / 2.0);
+      } else if (slot.light.intensity !== 0) {
+        slot.light.intensity = 0;
+        slot.light.visible = false;
+      }
+    }
+
+    renderer.render(scene, camera);
+  }
+
+  function resize(): void {
+    const w = canvas.clientWidth || 1;
+    const h = canvas.clientHeight || 1;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+
+  function dispose(): void {
+    for (const r of rooms) disposeRoomGroup(r);
+    rooms = [];
+    staticDispose(mats);
+    for (const slot of eventLights) slot.light.dispose();
+    lantern.dispose();
+    renderer.dispose();
+  }
+
+  resize();
+  rebuildRooms(1);
+  return { scene, camera, entityHost, update, resize, dispose };
+}
+
+function staticDispose(mats: SharedMaterials): void {
+  mats.staticMat.dispose();
+  mats.propsMat.dispose();
+  mats.sconceMat.dispose();
+  mats.alcoveMat.dispose();
+  mats.aoMat.dispose();
+}

@@ -1,9 +1,9 @@
-// Placeholder scaffold — hf-frontend replaces this in phase 7.
+// HALLWAKE — app root. The kiosk has one surface: the corridor shell.
+// Kiosk screens (attract/death/run/leaderboard) are phases inside GameShell
+// and the T4 ui layer, not routes.
+
+import GameShell from './game/GameShell';
+
 export default function App() {
-  return (
-    <main style={{ padding: "var(--space-5)", fontFamily: "var(--font-display)" }}>
-      <h1>HackathonFactory App</h1>
-      <p>Scaffold ready. Backend health: <code>/health</code>.</p>
-    </main>
-  );
+  return <GameShell />;
 }
