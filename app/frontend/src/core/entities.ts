@@ -16,6 +16,7 @@ import type {
 import type { DoorDef } from './schedule';
 import { archetypeGeom, sconcePositions } from './schedule';
 import { OIL_CRITICAL } from './oil';
+import { NEUTRAL_ENTITY_MODS, type EntityMods } from './progression';
 
 export const GAUNT_TELL_TICK = 60; // lights flicker twice, burn amber
 export const GAUNT_TELL_LEAD = 145; // TELL spans tellTick..tellTick+144, sweep starts after
@@ -129,11 +130,12 @@ export function stepGaunt(
   oil: number,
   door: number,
   hidden = false,
+  mods: EntityMods = NEUTRAL_ENTITY_MODS, // Wave 3: difficulty/IRON_NERVE stretch the react lead
 ): StepResult<GauntState> {
   const events: SimEvent[] = [];
   let next = g;
   const tellTick = def.gaunt!.tellTick;
-  const sweepStart = tellTick + GAUNT_TELL_LEAD;
+  const sweepStart = tellTick + Math.round(GAUNT_TELL_LEAD * mods.react);
 
   if (g.phase === 'IDLE' && roomTick === tellTick) {
     next = { ...g, phase: 'TELL' };
@@ -170,7 +172,14 @@ export function stepGaunt(
   return { e: next, events };
 }
 
-export function stepMurmur(m: MurmurState, roomTick: number, player: PlayerState, oil: number, door: number): StepResult<MurmurState> {
+export function stepMurmur(
+  m: MurmurState,
+  roomTick: number,
+  player: PlayerState,
+  oil: number,
+  door: number,
+  mods: EntityMods = NEUTRAL_ENTITY_MODS, // Wave 3: react widens/narrows the step cadence
+): StepResult<MurmurState> {
   const events: SimEvent[] = [];
   let next = m;
 
@@ -180,7 +189,8 @@ export function stepMurmur(m: MurmurState, roomTick: number, player: PlayerState
     events.push({ type: 'tell', entity: 'MURMUR', door, visible: oil > OIL_CRITICAL });
   }
 
-  if (roomTick > 0 && roomTick % MURMUR_STEP_EVERY === 0) {
+  const stepEvery = Math.max(1, Math.round(MURMUR_STEP_EVERY * mods.react));
+  if (roomTick > 0 && roomTick % stepEvery === 0) {
     const bearing = Math.atan2(m.x - player.x, m.z - player.z);
     const inCone = Math.abs(angleDiff(player.yaw, bearing)) <= MURMUR_CONE && oil > OIL_CRITICAL;
     if (inCone) {
@@ -252,11 +262,13 @@ export function stepStare(
   def: DoorDef,
   oil: number,
   door: number,
+  mods: EntityMods = NEUTRAL_ENTITY_MODS, // Wave 3: difficulty/IRON_NERVE scale the lead + grace
 ): StepResult<StareState> {
   const events: SimEvent[] = [];
   let next = st;
   const tellTick = def.stare!.tellTick;
-  const checkStart = tellTick + STARE_TELL_LEAD;
+  const checkStart = tellTick + Math.round(STARE_TELL_LEAD * mods.react);
+  const grace = Math.round(STARE_GRACE_TICKS * mods.react);
 
   if (st.phase === 'IDLE' && roomTick === tellTick) {
     next = { ...st, phase: 'TELL' };
@@ -269,7 +281,7 @@ export function stepStare(
       next = { ...st, phase: 'DEPARTED' }; // survived: the eye drifts out
     } else {
       const stareTicks = stareLooking(st, player) ? st.stareTicks + 1 : 0;
-      if (stareTicks > STARE_GRACE_TICKS) return { e: { ...st, stareTicks }, events, died: true };
+      if (stareTicks > grace) return { e: { ...st, stareTicks }, events, died: true };
       next = { ...st, stareTicks };
     }
   }
@@ -283,6 +295,7 @@ export function stepGrip(
   def: DoorDef,
   door: number,
   sconces: boolean[],
+  mods: EntityMods = NEUTRAL_ENTITY_MODS, // Wave 3: difficulty scales the chase pressure
 ): StepResult<GripState> {
   const events: SimEvent[] = [];
   let next = g;
@@ -309,10 +322,11 @@ export function stepGrip(
     next = { ...g, phase: 'FROZEN' };
   } else {
     // HUNT (and re-engage the moment the sconce goes dark): fixed distance/tick
+    const step = (GRIP_SPEED * mods.gripSpeed) / 60;
     const dx = player.x - g.x;
     const dz = player.z - g.z;
     const d = Math.hypot(dx, dz) || 1;
-    next = { ...g, phase: 'HUNT', x: g.x + (dx / d) * (GRIP_SPEED / 60), z: g.z + (dz / d) * (GRIP_SPEED / 60) };
+    next = { ...g, phase: 'HUNT', x: g.x + (dx / d) * step, z: g.z + (dz / d) * step };
   }
 
   const dist = Math.hypot(next.x - player.x, next.z - player.z);

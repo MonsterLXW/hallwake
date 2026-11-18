@@ -8,7 +8,7 @@
 // from here.
 
 import { useUIStore } from '../state/uiStore';
-import { CHECKPOINT_DOORS } from '../core/schedule';
+import { checkpointDoors, XP_LEVEL_THRESHOLDS } from '../core/progression';
 import type { EntityKind, ItemType } from '../core/types';
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
@@ -180,12 +180,13 @@ export default function Hud() {
             </span>
           ))}
         </div>
-        {/* checkpoint pips: six ruled marks, filled up to the live checkpoint */}
+        {/* checkpoint pips: ruled marks for this difficulty's spacing,
+            filled up to the live checkpoint */}
         <div
           style={{ display: 'flex', gap: 'var(--space-1)', marginTop: 'var(--space-2)' }}
-          aria-label={`checkpoint door ${hud.checkpoint} of 24`}
+          aria-label={`checkpoint door ${hud.checkpoint} of 24, ${hud.difficulty} difficulty`}
         >
-          {CHECKPOINT_DOORS.map((c) => (
+          {checkpointDoors(hud.difficulty).map((c) => (
             <span
               key={c}
               style={{
@@ -215,6 +216,42 @@ export default function Hud() {
           <span>Purse</span>
           <span style={{ color: 'var(--color-ink)' }} aria-label={`${hud.coins} coins`}>
             {hud.coins}
+          </span>
+        </div>
+        {/* Wave 3: XP ledger — the numeral plus three level pips (one per
+            perk pick); the perk names themselves live on the level-up plate */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 'var(--space-3)',
+            marginTop: 'var(--space-2)',
+            borderTop: 'var(--border-hairline)',
+            paddingTop: 'var(--space-2)',
+            fontSize: 'var(--text-2xs)',
+            letterSpacing: 'var(--tracking-label)',
+            textTransform: 'uppercase',
+            color: 'var(--color-ink-muted)',
+          }}
+          aria-label={`xp ${hud.xp}, level ${hud.level} of ${XP_LEVEL_THRESHOLDS.length}`}
+        >
+          <span>Xp</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <span style={{ color: 'var(--color-ink)' }}>{hud.xp}</span>
+            <span style={{ display: 'flex', gap: 'var(--space-1)' }} aria-hidden="true">
+              {XP_LEVEL_THRESHOLDS.map((t, i) => (
+                <span
+                  key={t}
+                  style={{
+                    width: '10px',
+                    height: '10px',
+                    background: hud.level > i ? 'var(--color-ink)' : 'var(--color-plate-sunken)',
+                    border: 'var(--border-hairline)',
+                  }}
+                />
+              ))}
+            </span>
           </span>
         </div>
       </div>

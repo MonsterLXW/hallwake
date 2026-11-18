@@ -23,6 +23,7 @@ import AttractScreen from '../ui/AttractScreen';
 import DeathCard from '../ui/DeathCard';
 import RunCard from '../ui/RunCard';
 import LoreCard from '../ui/LoreCard';
+import PerkOverlay from '../ui/PerkOverlay';
 
 const newSeed = (): number => (Date.now() % 1_000_000_000) | 0;
 const stepDown = (q: Quality): Quality => (q === 'high' ? 'mid' : 'low');
@@ -42,13 +43,14 @@ export default function GameShell() {
   const pinnedQuality = params.get('quality') !== null;
 
   const phase = useUIStore((s) => s.phase);
+  const perkPending = useUIStore((s) => s.hud.perkPending);
 
   const begin = useCallback(() => {
     const s = useUIStore.getState();
     if (s.phase === 'attract') {
       const seed = newSeed();
       s.setSeed(seed);
-      loopRef.current?.reset(seed);
+      loopRef.current?.reset(seed, s.difficulty); // Wave 3: the booth's difficulty starts the run
       s.setPhase('playing');
     }
     loopRef.current?.wakeAudio(); // gamepad begins never fire key listeners
@@ -79,6 +81,7 @@ export default function GameShell() {
       controller,
       seed,
       autopilot,
+      difficulty: useUIStore.getState().difficulty,
       isPaused: () => {
         const p = useUIStore.getState().phase;
         return p === 'attract' || p === 'paused';
@@ -174,7 +177,7 @@ export default function GameShell() {
   // the shell wipes the run so the next input starts at door 1.
   useEffect(() => {
     if (phase !== 'attract') return;
-    loopRef.current?.reset(newSeed());
+    loopRef.current?.reset(newSeed(), useUIStore.getState().difficulty);
     controllerRef.current?.release();
     void getScores(5).then((r) => useUIStore.getState().setScores(r.scores, r.source));
   }, [phase]);
@@ -260,6 +263,11 @@ export default function GameShell() {
       {phase === 'dead' && <DeathCard />}
       {phase === 'run' && <RunCard onNewRun={begin} />}
       {phase === 'attract' && <AttractScreen onBegin={begin} />}
+      {/* Wave 3: the level-up perk plate — the loop holds the corridor still
+          while the porter reads it (keys 1-3 answer, or click). */}
+      {phase === 'playing' && perkPending && (
+        <PerkOverlay onChoose={(p) => loopRef.current?.choosePerk(p)} />
+      )}
 
       {showFps && (
         <div

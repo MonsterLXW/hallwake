@@ -67,4 +67,12 @@ describe('kiosk idle reset', () => {
     expect(useUIStore.getState().runCard).toBeNull();
     expect(useUIStore.getState().scores).toHaveLength(1);
   });
+
+  it('Wave 3: difficulty is a booth setting — it survives the attract wipe', () => {
+    useUIStore.getState().setDifficulty('HELL');
+    useUIStore.getState().setPhase('playing');
+    vi.advanceTimersByTime(IDLE_MS);
+    expect(phase()).toBe('attract');
+    expect(useUIStore.getState().difficulty).toBe('HELL');
+  });
 });

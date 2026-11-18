@@ -8,13 +8,26 @@
 
 import { useEffect, useMemo } from 'react';
 import { useUIStore } from '../state/uiStore';
+import { DIFFICULTY_ORDER, type Difficulty } from '../core/progression';
 import Leaderboard from './Leaderboard';
 
 const DOOR_BAND = Array.from({ length: 24 }, (_, i) => i + 1);
 
+// Wave 3: booth difficulty — pure multipliers on lantern burn, tell/react
+// windows and checkpoint spacing (core/progression). Copy stays honest:
+// every descriptor names a real knob.
+const DIFFICULTY_COPY: Record<Difficulty, string> = {
+  EASY: 'slow burn · wide checkpoints',
+  NORMAL: 'the shipped corridor',
+  HARD: 'thirsty lantern · tighter tells',
+  HELL: 'one checkpoint · the corridor bites',
+};
+
 export default function AttractScreen({ onBegin }: { onBegin(): void }) {
   const scores = useUIStore((s) => s.scores);
   const scoresSource = useUIStore((s) => s.scoresSource);
+  const difficulty = useUIStore((s) => s.difficulty);
+  const setDifficulty = useUIStore((s) => s.setDifficulty);
   const reduced = useMemo(
     () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches,
     [],
@@ -156,6 +169,81 @@ export default function AttractScreen({ onBegin }: { onBegin(): void }) {
         >
           WASD move · mouse look · E interact · Esc pause · gamepad: left stick move, right stick look, A interact
         </p>
+      </div>
+
+      {/* Wave 3: difficulty — a ruled radio row, bone fill = selected.
+          stopPropagation keeps the kiosk "any key / any click begins"
+          listeners from firing while the porter is choosing a mode. */}
+      <div
+        role="radiogroup"
+        aria-label="Difficulty"
+        onPointerDown={(e) => e.stopPropagation()}
+        style={{
+          display: 'flex',
+          alignItems: 'stretch',
+          gap: 'var(--space-2)',
+          flexWrap: 'wrap',
+          borderTop: 'var(--border-hairline)',
+          borderBottom: 'var(--border-hairline)',
+          padding: 'var(--space-2) 0',
+        }}
+      >
+        <span
+          style={{
+            alignSelf: 'center',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--text-2xs)',
+            letterSpacing: 'var(--tracking-label)',
+            textTransform: 'uppercase',
+            color: 'var(--color-ink-muted)',
+            marginRight: 'var(--space-2)',
+          }}
+        >
+          Difficulty
+        </span>
+        {DIFFICULTY_ORDER.map((d) => {
+          const on = difficulty === d;
+          return (
+            <button
+              key={d}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={(e) => {
+                e.stopPropagation();
+                setDifficulty(d);
+              }}
+              onKeyDown={(e) => e.stopPropagation()}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 'var(--space-1)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--text-2xs)',
+                letterSpacing: 'var(--tracking-label)',
+                textTransform: 'uppercase',
+                color: on ? 'var(--color-accent-ink)' : 'var(--color-ink)',
+                background: on ? 'var(--color-accent)' : 'var(--color-plate)',
+                border: 'var(--border-plate)',
+                borderRadius: 'var(--radius-0)',
+                padding: 'var(--space-2) var(--space-3)',
+                cursor: 'pointer',
+                transition: 'background var(--motion-fast) var(--ease-out)',
+              }}
+            >
+              <span style={{ fontWeight: 700 }}>{d}</span>
+              <span
+                style={{
+                  textTransform: 'none',
+                  letterSpacing: 'normal',
+                  color: on ? 'var(--color-accent-ink)' : 'var(--color-ink-muted)',
+                }}
+              >
+                {DIFFICULTY_COPY[d]}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* last five, as a ruled ledger — passersby see the booth's history */}

@@ -1,5 +1,7 @@
 // HALLWAKE core — shared types. Pure data only: no THREE, no DOM, no WebAudio.
 
+import type { Difficulty, PerkId } from './progression';
+
 // Wave 2 roster (features.md): STARE = look-away threat, GRIP = corridor chase.
 export type EntityKind = 'GAUNT' | 'MURMUR' | 'TALLY' | 'CINDER' | 'STARE' | 'GRIP';
 
@@ -18,12 +20,14 @@ export type EventType =
   | 'coin' // collected coins
   | 'item_use' // consumed an item (item field says which)
   | 'lock' // locked exit opened with a PICK
-  | 'hide'; // entered/exited a closet
+  | 'hide' // entered/exited a closet
+  | 'perk'; // a level-up perk was chosen (perk field says which)
 
 export interface SimEvent {
   type: EventType;
   entity?: EntityKind;
   item?: ItemType;
+  perk?: PerkId; // Wave 3: set on 'perk' events
   door: number;
   visible: boolean; // false when oil <= 0.20 (tell FX suppressed)
 }
@@ -35,6 +39,7 @@ export interface Frame {
   pitchD?: number; // Wave 2: pitch delta this tick (STARE reads the full view)
   interact: boolean;
   use?: number; // inventory slot 0..3 actively used this tick (number keys)
+  perk?: PerkId; // Wave 3: perk chosen at the level-up overlay (applied once, only if offered)
 }
 
 export interface EntitySnapshot {
@@ -128,4 +133,8 @@ export interface SimState {
   lootTaken: boolean; // this room's authored loot pile already picked up
   coinsTaken: boolean; // this room's authored coin pile already collected
   invuln: number; // ticks of TONIC grace remaining (death checks skipped)
+  // --- Wave 3: XP, perks, difficulty (features.md) ---
+  xp: number; // earned from fixed events only: doors survived, banishes, loot
+  perks: PerkId[]; // chosen perks, in pick order; the sim applies their multipliers
+  difficulty: Difficulty; // attract-screen mode; pure multipliers, no RNG
 }

@@ -3,9 +3,20 @@
 // identical state out (proven by the golden traces).
 
 import type { EntityKind, EntityState, Frame, ItemType, SimEvent, SimState } from './types';
+import type { Difficulty, PerkId } from './progression';
+import {
+  DIFFICULTY_MODS,
+  FASTER_WALK_MULT,
+  XP_BANISH,
+  XP_DOOR,
+  XP_LOOT,
+  checkpointDoors,
+  entityMods,
+  perkChoices,
+  xpLevel,
+} from './progression';
 import type { DoorDef } from './schedule';
 import {
-  CHECKPOINT_DOORS,
   ENTRY,
   EXIT_DOOR,
   FAKE_DOOR_POS,
@@ -39,9 +50,9 @@ const PLAYER_RADIUS = 0.3;
 export const PITCH_LIMIT = Math.PI / 2 - 0.05; // Wave 2: the view never flips over
 const clampPitch = (v: number): number => (v < -PITCH_LIMIT ? -PITCH_LIMIT : v > PITCH_LIMIT ? PITCH_LIMIT : v);
 
-function nearestCheckpoint(door: number): number {
+function nearestCheckpoint(door: number, difficulty: Difficulty): number {
   let best = 1;
-  for (const c of CHECKPOINT_DOORS) if (c <= door) best = c;
+  for (const c of checkpointDoors(difficulty)) if (c <= door) best = c;
   return best;
 }
 
@@ -85,7 +96,7 @@ function tryDeathSave(s: SimState, killer: EntityKind, events: SimEvent[]): SimS
     });
     events.push({ type: 'item_use', item: 'WARD', door: s.door, visible: true });
     events.push({ type: 'banish', entity: killer, door: s.door, visible: true });
-    return { ...s, inv, entities };
+    return { ...s, inv, entities, xp: s.xp + XP_BANISH }; // Wave 3: a banish banks XP
   }
   return null;
 }
@@ -96,7 +107,12 @@ function initialSconces(def: DoorDef): boolean[] {
   return def.cinderOrder !== undefined || def.grip !== undefined ? [true, true, true] : [false, false, false];
 }
 
-export function makeRoomState(door: number, oil: number): SimState {
+export function makeRoomState(
+  door: number,
+  oil: number,
+  difficulty: Difficulty = 'NORMAL',
+  perks: PerkId[] = [],
+): SimState {
   const def = doorDef(door);
   return {
     tick: 0,
@@ -105,7 +121,7 @@ export function makeRoomState(door: number, oil: number): SimState {
     player: { x: ENTRY.x, z: ENTRY.z, yaw: 0, pitch: 0, vel: { x: 0, z: 0 } },
     oil,
     alive: true,
-    checkpoint: nearestCheckpoint(door),
+    checkpoint: nearestCheckpoint(door, difficulty),
     deaths: 0,
     runMs: 0,
     doorLog: door + 1,
@@ -122,13 +138,18 @@ export function makeRoomState(door: number, oil: number): SimState {
     lootTaken: false,
     coinsTaken: false,
     invuln: 0,
+    xp: 0,
+    perks: [...perks],
+    difficulty,
   };
 }
 
-export function createInitialState(seed: number): SimState {
+export function createInitialState(seed: number, difficulty: Difficulty = 'NORMAL', perks: PerkId[] = []): SimState {
   // The schedule is fixed; the seed is only a run id (leaderboard), never RNG.
   void seed;
-  return makeRoomState(1, 1);
+  const s = makeRoomState(1, 1, difficulty, perks);
+  // Wave 3: EXTRA_TONIC — the kit starts the run with a tonic.
+  return perks.includes('EXTRA_TONIC') ? { ...s, inv: ['TONIC'] } : s;
 }
 
 function collide(x: number, z: number, def: ReturnType<typeof doorDef>): { x: number; z: number } {
@@ -162,7 +183,7 @@ export function stepSim(state: SimState, frame: Frame): SimState {
   if (!s.alive) {
     const freeze = s.freeze - 1;
     if (freeze > 0) return { ...s, freeze };
-    const rs = makeRoomState(s.checkpoint, OIL_RESPAWN);
+    const rs = makeRoomState(s.checkpoint, OIL_RESPAWN, s.difficulty, s.perks);
     return {
       ...rs,
       tick: s.tick,
@@ -172,6 +193,7 @@ export function stepSim(state: SimState, frame: Frame): SimState {
       deepest: s.deepest,
       inv: s.inv, // the kit and the coin purse survive a death
       coins: s.coins,
+      xp: s.xp, // Wave 3: XP and chosen perks survive a death
       events: [],
     };
   }
@@ -181,12 +203,27 @@ export function stepSim(state: SimState, frame: Frame): SimState {
   const def = doorDef(s.door);
   const events: SimEvent[] = [];
 
+  // Wave 3: a level-up perk choice arrives as a Frame field (the overlay /
+  // autopilot sends it). Applied once, only while a pick is pending and only
+  // from the deterministically offered list.
+  if (
+    frame.perk !== undefined &&
+    s.perks.length < xpLevel(s.xp) &&
+    perkChoices(s.perks).includes(frame.perk)
+  ) {
+    s = { ...s, perks: [...s.perks, frame.perk] };
+    if (frame.perk === 'EXTRA_TONIC' && s.inv.length < INV_CAP) s = { ...s, inv: [...s.inv, 'TONIC'] };
+    events.push({ type: 'perk', perk: frame.perk, door: s.door, visible: true });
+  }
+
   // --- movement ----------------------------------------------------------
   let mx = frame.mx, mz = frame.mz;
   if (s.hidden) { mx = 0; mz = 0; } // Wave 1: a closed closet locks movement
   const mag = Math.hypot(mx, mz);
   if (mag > 1) { mx /= mag; mz /= mag; }
-  const vel = { x: mx * WALK_SPEED, z: mz * WALK_SPEED };
+  // Wave 3: FASTER_WALK is a small fixed multiplier on the walk.
+  const speed = WALK_SPEED * (s.perks.includes('FASTER_WALK') ? FASTER_WALK_MULT : 1);
+  const vel = { x: mx * speed, z: mz * speed };
   const pos = collide(s.player.x + vel.x / 60, s.player.z + vel.z / 60, def);
   s = {
     ...s,
@@ -200,9 +237,9 @@ export function stepSim(state: SimState, frame: Frame): SimState {
     },
   };
 
-  // --- oil drain (x4 while CINDER active) --------------------------------
+  // --- oil drain (x4 while CINDER active; difficulty scales the burn) -----
   const active = cinderActive(s.entities);
-  s = { ...s, oil: drainOil(s.oil, active ? OIL_CINDER_MULT : 1) };
+  s = { ...s, oil: drainOil(s.oil, (active ? OIL_CINDER_MULT : 1) * DIFFICULTY_MODS[s.difficulty].oilDrain) };
 
   // --- interact ----------------------------------------------------------
   if (frame.interact) {
@@ -254,6 +291,7 @@ export function stepSim(state: SimState, frame: Frame): SimState {
               : entities,
             sconces: sconceFlags({ ...cinder, progress }, def),
             oil,
+            xp: s.xp + (banished ? XP_BANISH : 0), // Wave 3: a banish banks XP
           };
           s = ns;
         } else {
@@ -276,7 +314,7 @@ export function stepSim(state: SimState, frame: Frame): SimState {
     // Wave 1: an authored loot pile — pick it up while the kit has a slot
     if (def.loot && !s.lootTaken && dist2(s.player.x, s.player.z, geom.loot) <= INTERACT_RANGE) {
       if (s.inv.length < INV_CAP) {
-        s = { ...s, inv: [...s.inv, def.loot], lootTaken: true };
+        s = { ...s, inv: [...s.inv, def.loot], lootTaken: true, xp: s.xp + XP_LOOT };
         events.push({ type: 'loot', item: def.loot, door: s.door, visible: true });
         acted = true;
       }
@@ -321,8 +359,11 @@ export function stepSim(state: SimState, frame: Frame): SimState {
       if (open) {
         const nd = s.door + 1;
         const ndef = doorDef(nd);
+        // Wave 3: checkpoint spacing follows the difficulty table, not the
+        // schedule flag (identical at Normal).
+        const isCp = checkpointDoors(s.difficulty).includes(nd);
         const ev: SimEvent[] = [{ type: 'door_open', door: nd, visible: true }];
-        if (ndef.checkpoint) ev.push({ type: 'checkpoint', door: nd, visible: true });
+        if (isCp) ev.push({ type: 'checkpoint', door: nd, visible: true });
         return {
           ...s,
           door: nd,
@@ -331,13 +372,14 @@ export function stepSim(state: SimState, frame: Frame): SimState {
           player: { ...s.player, x: ENTRY.x, z: ENTRY.z, vel: { x: 0, z: 0 } },
           entities: buildEntities(ndef),
           sconces: initialSconces(ndef),
-          checkpoint: ndef.checkpoint ? nd : s.checkpoint,
+          checkpoint: isCp ? nd : s.checkpoint,
           deepest: Math.max(s.deepest, nd),
           oilCanUsed: false,
           hidden: false,
           lootTaken: false,
           coinsTaken: false,
           invuln: 0,
+          xp: s.xp + XP_DOOR, // Wave 3: a door survived banks XP
           events: [...events, ...ev],
         };
       }
@@ -365,17 +407,20 @@ export function stepSim(state: SimState, frame: Frame): SimState {
   }
 
   // --- entity FSMs --------------------------------------------------------
+  // Wave 3: difficulty + perks reach the FSMs as pure multipliers (Normal +
+  // no perks = the shipped constants, so every trace runs unchanged).
+  const mods = entityMods(s.difficulty, s.perks);
   let died: SimEvent | null = null;
   const entities: EntityState[] = [];
   for (const e of s.entities) {
     let r: { e: EntityState; events: SimEvent[]; died?: boolean };
     switch (e.kind) {
-      case 'GAUNT': r = stepGaunt(e, s.roomTick, s.player, def, s.oil, s.door, s.hidden); break;
-      case 'MURMUR': r = stepMurmur(e, s.roomTick, s.player, s.oil, s.door); break;
+      case 'GAUNT': r = stepGaunt(e, s.roomTick, s.player, def, s.oil, s.door, s.hidden, mods); break;
+      case 'MURMUR': r = stepMurmur(e, s.roomTick, s.player, s.oil, s.door, mods); break;
       case 'TALLY': r = stepTally(e, s.roomTick, s.oil, s.door); break;
       case 'CINDER': r = stepCinder(e, s.roomTick, s.oil, s.door); break;
-      case 'STARE': r = stepStare(e, s.roomTick, s.player, def, s.oil, s.door); break;
-      case 'GRIP': r = stepGrip(e, s.roomTick, s.player, def, s.door, s.sconces); break;
+      case 'STARE': r = stepStare(e, s.roomTick, s.player, def, s.oil, s.door, mods); break;
+      case 'GRIP': r = stepGrip(e, s.roomTick, s.player, def, s.door, s.sconces, mods); break;
     }
     entities.push(r.e);
     events.push(...r.events);

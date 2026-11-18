@@ -70,6 +70,14 @@ export class PlayerController {
     if (this.locked && typeof document.exitPointerLock === 'function') document.exitPointerLock();
   }
 
+  // Wave 3: the perk overlay's number keys also land here as use-edges; when
+  // the loop consumes a perk choice it clears them so "1" never also drinks
+  // the kit slot on the next real frame.
+  clearEdges(): void {
+    this.interactEdge = false;
+    this.useEdge = -1;
+  }
+
   private onCanvasDown = (): void => {
     this.lock();
   };

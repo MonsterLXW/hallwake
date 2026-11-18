@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import type { SimEvent, SimState } from '../core/types';
 import { lanternRadius } from '../core/oil';
+import { LANTERN_PERK_BONUS } from '../core/progression';
 import { doorDef } from '../core/schedule';
 import { QUALITY, type Quality } from './quality';
 import {
@@ -167,7 +168,9 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
     const cinderLive = !!cinder && (cinder.phase === 'TELL' || cinder.phase === 'BLACKOUT');
     const stareLive = !!stare && (stare.phase === 'TELL' || stare.phase === 'ACTIVE');
 
-    lantern.distance = lanternRadius(sim.oil) * preset.lanternScale;
+    // Wave 3: BRIGHT_LANTERN perk throws the beam 1.5 m farther.
+    const lanternBonus = sim.perks.includes('BRIGHT_LANTERN') ? LANTERN_PERK_BONUS : 0;
+    lantern.distance = lanternRadius(sim.oil, lanternBonus) * preset.lanternScale;
     let intensity = 2.6 + 1.8 * sim.oil;
     scratchColor.set(cWarm);
     if (gauntLive) {

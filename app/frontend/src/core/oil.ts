@@ -15,8 +15,8 @@ export function refillOil(oil: number, amount: number = OIL_REFILL): number {
   return Math.min(1, oil + amount);
 }
 
-export function lanternRadius(oil: number): number {
-  return 2 + 6 * oil; // metres — consumed by the renderer's SpotLight distance
+export function lanternRadius(oil: number, bonus = 0): number {
+  return 2 + 6 * oil + bonus; // metres — consumed by the renderer's SpotLight distance; bonus = Wave 3 BRIGHT_LANTERN perk
 }
 
 export function isCritical(oil: number): boolean {

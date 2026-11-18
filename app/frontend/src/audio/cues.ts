@@ -143,6 +143,15 @@ export const EVENT_CUES: Record<EventType, CueRecipe> = {
       { osc: 'noise', freqFrom: 0, freqTo: 0, dur: 0.3, attack: 0.02, gain: 0.16, filter: { type: 'lowpass', from: 700, to: 250, q: 1.2 } },
     ],
   },
+  // --- Wave 3 progression (features.md) ---
+  perk: {
+    bus: 'door',
+    layers: [
+      // the level-up plate: two quiet rising sines — a reward, never a tell
+      { osc: 'sine', freqFrom: 392, freqTo: 392, dur: 0.28, attack: 0.01, gain: 0.14 },
+      { osc: 'sine', freqFrom: 587, freqTo: 587, dur: 0.42, attack: 0.02, gain: 0.12 },
+    ],
+  },
 };
 
 // Per-entity tell voices — each tell is learnable by ear (brief §7: audio

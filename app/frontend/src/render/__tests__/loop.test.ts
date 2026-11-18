@@ -102,4 +102,24 @@ describe('autopilot dev entry (plays doors with the sim)', () => {
     expect(s.deaths).toBe(0);
     expect(s.deepest).toBe(24);
   });
+
+  it('Wave 3: the autopilot banks XP and claims its three perk picks inline', () => {
+    const ap = createAutopilot();
+    let s = createInitialState(1);
+    for (let i = 0; i < 60_000 && !s.finished; i++) s = stepSim(s, ap(s));
+    expect(s.finished).toBe(true);
+    expect(s.deaths).toBe(0);
+    // Deterministic picks: the first offered choice at each level.
+    expect(s.perks).toEqual(['EXTRA_TONIC', 'PROSPECT', 'IRON_NERVE']);
+    expect(s.xp).toBeGreaterThanOrEqual(180);
+  });
+
+  it('Wave 3: level 1 lands by door 5 (four doors survived = 40 XP)', () => {
+    const ap = createAutopilot();
+    let s = createInitialState(1);
+    while (s.door < 5 && !s.finished) s = stepSim(s, ap(s));
+    expect(s.xp).toBeGreaterThanOrEqual(40);
+    s = stepSim(s, ap(s)); // the very next frame carries the perk choice
+    expect(s.perks).toHaveLength(1);
+  });
 });

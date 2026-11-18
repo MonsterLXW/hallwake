@@ -9,6 +9,7 @@ import { create } from 'zustand';
 import type { HudSnapshot } from '../render/loop';
 import type { RunCard } from '../core/scoring';
 import type { ScoreRow } from '../net/scoresClient';
+import type { Difficulty } from '../core/progression';
 
 export type Phase = 'attract' | 'playing' | 'paused' | 'dead' | 'run';
 
@@ -41,6 +42,7 @@ export interface UIState {
   epitaph: string | null; // DeathCard line
   runFlavor: string | null; // RunCard line
   seed: number; // run id for the leaderboard POST
+  difficulty: Difficulty; // Wave 3: attract-screen mode, survives the attract wipe
   setPhase(p: Phase): void;
   setHud(h: HudSnapshot): void;
   setRunCard(c: RunCard | null): void;
@@ -49,6 +51,7 @@ export interface UIState {
   setEpitaph(text: string | null): void;
   setRunFlavor(text: string | null): void;
   setSeed(n: number): void;
+  setDifficulty(d: Difficulty): void;
   markActivity(): void;
 }
 
@@ -68,6 +71,11 @@ const INITIAL_HUD: HudSnapshot = {
   locked: false,
   hidden: false,
   stareAt: false,
+  xp: 0,
+  level: 0,
+  perks: [],
+  perkPending: false,
+  difficulty: 'NORMAL',
 };
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -80,6 +88,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   epitaph: null,
   runFlavor: null,
   seed: 0,
+  difficulty: 'NORMAL',
 
   setPhase: (p) => {
     if (get().phase === p) return;
@@ -114,6 +123,9 @@ export const useUIStore = create<UIState>((set, get) => ({
   setEpitaph: (text) => set({ epitaph: text }),
   setRunFlavor: (text) => set({ runFlavor: text }),
   setSeed: (n) => set({ seed: n }),
+  // Wave 3: the booth's difficulty is a setting, not run state — the attract
+  // wipe deliberately keeps it (the next porter picks up where the last left).
+  setDifficulty: (d) => set({ difficulty: d }),
 
   markActivity: () => {
     if (get().phase === 'attract') return;

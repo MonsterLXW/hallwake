@@ -15,6 +15,7 @@ import {
 } from '../core/schedule';
 import type { Archetype } from '../core/schedule';
 import { stareLooking } from '../core/entities';
+import { perkChoices, xpLevel, type Difficulty, type PerkId } from '../core/progression';
 import type { EntityKind, Frame, ItemType, SimEvent, SimState } from '../core/types';
 import type { SceneBundle } from './scene';
 import type { PlayerController } from './playerController';
@@ -42,6 +43,12 @@ export interface HudSnapshot {
   hidden: boolean; // inside a closet
   // Wave 2: the view is inside STARE's cone right now (the LOOK AWAY plate)
   stareAt: boolean;
+  // Wave 3 progression surface (features.md): XP, level, perks, difficulty
+  xp: number;
+  level: number;
+  perks: PerkId[];
+  perkPending: boolean; // a level-up pick is owed -> the overlay opens
+  difficulty: Difficulty;
 }
 
 export type RunPhase = 'playing' | 'dead' | 'run';
@@ -51,6 +58,7 @@ export interface LoopDeps {
   controller: PlayerController;
   seed: number;
   autopilot: boolean;
+  difficulty: Difficulty; // Wave 3: attract-screen mode, threaded into the sim
   isPaused(): boolean;
   onHud(h: HudSnapshot): void;
   onPhase(p: RunPhase): void;
@@ -79,7 +87,9 @@ export interface LoopHandle {
   fps(): number;
   state(): SimState;
   /** Kiosk reset: fresh sim at door 1 with a new run id, scene untouched. */
-  reset(seed: number): void;
+  reset(seed: number, difficulty: Difficulty): void;
+  /** Wave 3: the perk overlay's choice, applied on the next sim tick. */
+  choosePerk(p: PerkId): void;
   /** Gamepad begins never fire key/pointer listeners: wake the graph here. */
   wakeAudio(): void;
 }
@@ -151,6 +161,10 @@ export function createAutopilot(): (s: SimState) => Frame {
     f.yawD = 0;
     f.pitchD = 0;
     f.interact = false;
+    // Wave 3: a porter who knows the schedule also claims every perk pick
+    // instantly — always the first offered choice, so the run is identical
+    // every time (no RNG anywhere, overlay included).
+    f.perk = xpLevel(s.xp) > s.perks.length ? perkChoices(s.perks)[0] : undefined;
     if (!s.alive || s.finished) return f;
 
     const def = doorDef(s.door);
@@ -243,9 +257,10 @@ export function createAutopilot(): (s: SimState) => Frame {
 }
 
 export function startLoop(deps: LoopDeps): LoopHandle {
-  let sim = createInitialState(deps.seed);
+  let sim = createInitialState(deps.seed, deps.difficulty);
   const autopilot = deps.autopilot ? createAutopilot() : null;
   const events: SimEvent[] = [];
+  let queuedPerk: PerkId | null = null; // Wave 3: overlay choice awaiting the next tick
 
   // T3 integration (handoff): the entity host keeps EntityGroup in sync with
   // the sim and owns the SimEvent -> audio dispatch; the graph arms its
@@ -282,22 +297,43 @@ export function startLoop(deps: LoopDeps): LoopHandle {
       fpsAt = t;
     }
 
+    // Wave 3: while a level-up pick is owed, the corridor waits — the sim
+    // freezes (no drain, no entity steps) until the overlay sends a choice
+    // through choosePerk(). The autopilot never owes a pick: it answers
+    // inline on its own frame.
+    const perkPending =
+      !deps.autopilot && sim.alive && !sim.finished && xpLevel(sim.xp) > sim.perks.length;
+    const corridorFrozen = perkPending && queuedPerk === null;
+
     if (!deps.isPaused()) {
-      acc += dt;
-      let steps = 0;
-      while (acc >= DT && steps < MAX_CATCHUP_STEPS) {
-        const frame = autopilot
-          ? autopilot(sim)
-          : deps.controller.readFrame(sim.player.yaw);
-        if (frameHasInput(frame)) deps.onActivity?.();
-        sim = stepSim(sim, frame);
+      if (corridorFrozen) {
+        acc = 0;
+      } else if (perkPending && queuedPerk !== null) {
+        const p = queuedPerk;
+        queuedPerk = null;
+        deps.controller.clearEdges(); // the number keys that chose the perk must not also drink the kit
+        sim = stepSim(sim, { mx: 0, mz: 0, yawD: 0, pitchD: 0, interact: false, perk: p });
         if (sim.events.length > 0) {
           for (const e of sim.events) events.push(e);
         }
-        acc -= DT;
-        steps++;
+        acc = 0;
+      } else {
+        acc += dt;
+        let steps = 0;
+        while (acc >= DT && steps < MAX_CATCHUP_STEPS) {
+          const frame = autopilot
+            ? autopilot(sim)
+            : deps.controller.readFrame(sim.player.yaw);
+          if (frameHasInput(frame)) deps.onActivity?.();
+          sim = stepSim(sim, frame);
+          if (sim.events.length > 0) {
+            for (const e of sim.events) events.push(e);
+          }
+          acc -= DT;
+          steps++;
+        }
+        if (acc > DT * MAX_CATCHUP_STEPS) acc = 0; // drop the backlog, never spiral
       }
-      if (acc > DT * MAX_CATCHUP_STEPS) acc = 0; // drop the backlog, never spiral
     }
 
     // Wave 2: the sim owns the view (STARE reads yaw AND pitch), so the
@@ -308,7 +344,7 @@ export function startLoop(deps: LoopDeps): LoopHandle {
     events.length = 0;
 
     // footstep thuds on the door bus, cadence from walked distance
-    if (sim.alive && !deps.isPaused()) {
+    if (sim.alive && !deps.isPaused() && !corridorFrozen) {
       const speed = Math.hypot(sim.player.vel.x, sim.player.vel.z);
       walkDist += speed * dt;
       if (walkDist >= 1.35) {
@@ -343,6 +379,11 @@ export function startLoop(deps: LoopDeps): LoopHandle {
         locked: doorDef(sim.door).locked === true && !sim.inv.includes('PICK'),
         hidden: sim.hidden,
         stareAt: !!stare && stare.phase === 'ACTIVE' && stareLooking(stare, sim.player),
+        xp: sim.xp,
+        level: xpLevel(sim.xp),
+        perks: [...sim.perks],
+        perkPending: sim.alive && !sim.finished && xpLevel(sim.xp) > sim.perks.length,
+        difficulty: sim.difficulty,
       });
     }
     deps.onPhase(sim.finished ? 'run' : sim.alive ? 'playing' : 'dead');
@@ -358,10 +399,14 @@ export function startLoop(deps: LoopDeps): LoopHandle {
     },
     fps: () => fps,
     state: () => sim,
-    reset(seed: number): void {
-      sim = createInitialState(seed);
+    reset(seed: number, difficulty: Difficulty): void {
+      sim = createInitialState(seed, difficulty);
+      queuedPerk = null;
       acc = 0;
       walkDist = 0;
+    },
+    choosePerk(p: PerkId): void {
+      queuedPerk = p;
     },
     wakeAudio(): void {
       if (audio.ensure()) audio.startAmbience();
