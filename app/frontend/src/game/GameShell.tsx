@@ -24,6 +24,7 @@ import DeathCard from '../ui/DeathCard';
 import RunCard from '../ui/RunCard';
 import LoreCard from '../ui/LoreCard';
 import PerkOverlay from '../ui/PerkOverlay';
+import ShopScreen from '../ui/ShopScreen';
 
 const newSeed = (): number => (Date.now() % 1_000_000_000) | 0;
 const stepDown = (q: Quality): Quality => (q === 'high' ? 'mid' : 'low');
@@ -44,6 +45,7 @@ export default function GameShell() {
 
   const phase = useUIStore((s) => s.phase);
   const perkPending = useUIStore((s) => s.hud.perkPending);
+  const shop = useUIStore((s) => s.hud.shop);
 
   const begin = useCallback(() => {
     const s = useUIStore.getState();
@@ -267,6 +269,17 @@ export default function GameShell() {
           while the porter reads it (keys 1-3 answer, or click). */}
       {phase === 'playing' && perkPending && (
         <PerkOverlay onChoose={(p) => loopRef.current?.choosePerk(p)} />
+      )}
+      {/* Wave 4: MOTT the threshold keeper — doors 8/16/24. The loop holds
+          the corridor still while the purse is counted (keys 1-N buy,
+          Enter moves on, or click). If a perk pick is owed at the same
+          threshold, the perk plate reads first — both plates are centered
+          and must never stack. */}
+      {phase === 'playing' && shop && !perkPending && (
+        <ShopScreen
+          onBuy={(i) => loopRef.current?.buyShop(i)}
+          onClose={() => loopRef.current?.closeShop()}
+        />
       )}
 
       {showFps && (

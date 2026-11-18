@@ -10,12 +10,14 @@
 import { useUIStore } from '../state/uiStore';
 import { checkpointDoors, XP_LEVEL_THRESHOLDS } from '../core/progression';
 import type { EntityKind, ItemType } from '../core/types';
+import Minimap from './Minimap';
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
 // Wave 1 kit glyphs: stroked bone marks, each a distinct silhouette so the
-// slot reads at a glance (and never relies on color alone).
-function ItemGlyph({ item }: { item: ItemType }) {
+// slot reads at a glance (and never relies on color alone). Shared with the
+// Wave 4 vendor screen (ShopScreen).
+export function ItemGlyph({ item }: { item: ItemType }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -255,6 +257,9 @@ export default function Hud() {
           </span>
         </div>
       </div>
+
+      {/* Wave 4: the minimap plate — top-right, opposite the door log */}
+      <Minimap />
 
       {/* --- oil gauge: bottom-left vertical tube --- */}
       <div

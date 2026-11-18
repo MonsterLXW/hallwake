@@ -141,6 +141,7 @@ export function makeRoomState(
     xp: 0,
     perks: [...perks],
     difficulty,
+    secretFound: false,
   };
 }
 
@@ -327,6 +328,23 @@ export function stepSim(state: SimState, frame: Frame): SimState {
       acted = true;
     }
 
+    // Wave 4: the hidden alcove — E on the marked odd sconce opens the nook
+    // once, granting the authored bonus loot + coins. A full pack refuses
+    // the visit (same rule as a loot pile): the secret is never consumed.
+    if (def.secret && !s.secretFound && dist2(s.player.x, s.player.z, def.secret) <= INTERACT_RANGE) {
+      if (s.inv.length < INV_CAP) {
+        s = {
+          ...s,
+          inv: [...s.inv, def.secret.loot],
+          coins: s.coins + def.secret.coins,
+          secretFound: true,
+          xp: s.xp + XP_LOOT, // the alcove's loot banks XP like any other pile
+        };
+        events.push({ type: 'secret', item: def.secret.loot, door: s.door, visible: true });
+        acted = true;
+      }
+    }
+
     // Wave 1: closet — E near the closet toggles hidden (enter / exit).
     // While hidden, movement is locked and the GAUNT sweep cannot reach.
     if (def.closet) {
@@ -378,6 +396,7 @@ export function stepSim(state: SimState, frame: Frame): SimState {
           hidden: false,
           lootTaken: false,
           coinsTaken: false,
+          secretFound: false, // Wave 4: each room's secret is fresh
           invuln: 0,
           xp: s.xp + XP_DOOR, // Wave 3: a door survived banks XP
           events: [...events, ...ev],

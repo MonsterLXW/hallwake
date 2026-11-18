@@ -152,6 +152,24 @@ export const EVENT_CUES: Record<EventType, CueRecipe> = {
       { osc: 'sine', freqFrom: 587, freqTo: 587, dur: 0.42, attack: 0.02, gain: 0.12 },
     ],
   },
+  // --- Wave 4 depth (features.md) ---
+  shop: {
+    bus: 'door',
+    layers: [
+      // coins counted on the keeper's ledge: two dry metal ticks
+      { osc: 'sine', freqFrom: 1046, freqTo: 1046, dur: 0.08, attack: 0.003, gain: 0.14 },
+      { osc: 'sine', freqFrom: 1568, freqTo: 1568, dur: 0.1, attack: 0.004, gain: 0.1 },
+    ],
+  },
+  secret: {
+    bus: 'ambience',
+    layers: [
+      // the hollow stone sliding: a low rumble opening into a small cold
+      // sparkle — a discovery sound, never a tell
+      { osc: 'noise', freqFrom: 0, freqTo: 0, dur: 0.6, attack: 0.06, gain: 0.2, filter: { type: 'lowpass', from: 500, to: 140, q: 1.1 } },
+      { osc: 'sine', freqFrom: 659, freqTo: 988, dur: 0.5, attack: 0.08, gain: 0.12 },
+    ],
+  },
 };
 
 // Per-entity tell voices — each tell is learnable by ear (brief §7: audio

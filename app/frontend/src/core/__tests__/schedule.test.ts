@@ -275,3 +275,33 @@ describe('Wave 2 authored extras (STARE, GRIP)', () => {
     }
   });
 });
+
+describe('Wave 4 authored extras (hidden room)', () => {
+  it('exactly one door carries a secret: door 11, a safe (eventless) door', () => {
+    const secret = SCHEDULE.filter((d) => d.secret).map((d) => d.door);
+    expect(secret).toEqual([11]);
+    const def = doorDef(11);
+    expect(def.event).toBeNull();
+    expect(def.secret!.loot).toBe('WARD');
+    expect(def.secret!.coins).toBe(6);
+  });
+
+  // FAIRNESS INVARIANT: the marked sconce must sit in-room, clear of the
+  // furniture and the other authored anchors, and be reachable from the
+  // west-wall walk (x = 0.2 is the player's hugging line).
+  it('the secret sconce is in-room, clear of colliders/alcoves/piles, and reachable', () => {
+    const def = doorDef(11);
+    const pt = def.secret!;
+    expect(pt.x).toBeGreaterThanOrEqual(0);
+    expect(pt.x).toBeLessThanOrEqual(ROOM_W);
+    expect(pt.z).toBeGreaterThanOrEqual(0);
+    expect(pt.z).toBeLessThanOrEqual(ROOM_D);
+    const inside = (p: { x: number; z: number }, b: AABB) => p.x > b.x0 && p.x < b.x1 && p.z > b.z0 && p.z < b.z1;
+    const geom = archetypeGeom(def.archetype);
+    for (const c of geom.colliders) expect(inside(pt, c), `secret inside collider`).toBe(false);
+    for (const a of geom.alcoves) expect(inside(pt, a), 'secret inside an alcove').toBe(false);
+    expect(Math.hypot(pt.x - geom.loot.x, pt.z - geom.loot.z)).toBeGreaterThan(INTERACT_RANGE);
+    expect(Math.hypot(pt.x - geom.coins.x, pt.z - geom.coins.z)).toBeGreaterThan(INTERACT_RANGE);
+    expect(Math.hypot(pt.x - 0.2, 0)).toBeLessThanOrEqual(INTERACT_RANGE); // west-wall walk reaches it
+  });
+});

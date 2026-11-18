@@ -21,7 +21,9 @@ export type EventType =
   | 'item_use' // consumed an item (item field says which)
   | 'lock' // locked exit opened with a PICK
   | 'hide' // entered/exited a closet
-  | 'perk'; // a level-up perk was chosen (perk field says which)
+  | 'perk' // a level-up perk was chosen (perk field says which)
+  | 'shop' // bought an offer from the threshold keeper (item field says which)
+  | 'secret'; // the hidden alcove was opened (item field says the bonus loot)
 
 export interface SimEvent {
   type: EventType;
@@ -137,4 +139,6 @@ export interface SimState {
   xp: number; // earned from fixed events only: doors survived, banishes, loot
   perks: PerkId[]; // chosen perks, in pick order; the sim applies their multipliers
   difficulty: Difficulty; // attract-screen mode; pure multipliers, no RNG
+  // --- Wave 4: hidden room (features.md) ---
+  secretFound: boolean; // this room's authored secret alcove already opened
 }

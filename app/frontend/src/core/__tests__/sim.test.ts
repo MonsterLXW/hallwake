@@ -318,6 +318,55 @@ describe('Wave 2: STARE + GRIP through stepSim', () => {
   });
 });
 
+describe('Wave 4: hidden alcove (door 11 secret)', () => {
+  const tap: Frame = { mx: 0, mz: 0, yawD: 0, interact: true };
+  const move = (n: number, mx: number, mz: number): Frame[] =>
+    Array.from({ length: n }, () => ({ mx, mz, yawD: 0, interact: false }));
+  // west along the entry row, then up the west wall to the odd sconce at
+  // (0.5, 5.5): 142 W -> x = 7 - 142*0.0366667 = 1.79333; 110 N ->
+  // z = 1.5 + 110*0.0366667 = 5.53333; dist to sconce = 1.294 < 1.6.
+  const TO_SCONCE = [...move(142, -1, 0), ...move(110, 0, 1)];
+
+  it('E on the marked sconce opens the alcove once: bonus loot + coins + secret event', () => {
+    let s = makeRoomState(11, 1);
+    expect(s.secretFound).toBe(false);
+    for (const f of TO_SCONCE) s = stepSim(s, f);
+    s = stepSim(s, tap);
+    expect(s.secretFound).toBe(true);
+    expect(s.inv).toEqual(['WARD']);
+    expect(s.coins).toBe(6);
+    expect(s.xp).toBe(5); // the alcove loot banks XP_LOOT like any other pile
+    expect(s.events.some((e) => e.type === 'secret' && e.item === 'WARD')).toBe(true);
+    // one-time: a second tap grants nothing and emits no secret event
+    s = stepSim(s, tap);
+    expect(s.coins).toBe(6);
+    expect(s.inv).toEqual(['WARD']);
+    expect(s.events.some((e) => e.type === 'secret')).toBe(false);
+  });
+
+  it('a full pack refuses the visit: the secret is never consumed', () => {
+    let s: SimState = { ...makeRoomState(11, 1), inv: ['TONIC', 'PICK', 'WARD', 'WARD'] };
+    for (const f of TO_SCONCE) s = stepSim(s, f);
+    s = stepSim(s, tap);
+    expect(s.secretFound).toBe(false);
+    expect(s.coins).toBe(0);
+    expect(s.inv).toHaveLength(4);
+  });
+
+  it('the secret is fresh again in the next room (per-room one-time)', () => {
+    let s = makeRoomState(11, 1);
+    for (const f of TO_SCONCE) s = stepSim(s, f);
+    s = stepSim(s, tap);
+    expect(s.secretFound).toBe(true);
+    // from (1.79, 5.53): 142 E along z=5.53 (clear of the bed at z>=6),
+    // 117 N to the exit at (7,10) -> z clamps 9.8, dist 0.2
+    for (const f of [...move(142, 1, 0), ...move(117, 0, 1)]) s = stepSim(s, f);
+    s = stepSim(s, tap);
+    expect(s.door).toBe(12);
+    expect(s.secretFound).toBe(false);
+  });
+});
+
 describe('core purity (source scan)', () => {
   const coreDir = join(__dirname, '..');
   const coreFiles = readdirSync(coreDir).filter((f) => f.endsWith('.ts'));

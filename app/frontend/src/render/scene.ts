@@ -124,6 +124,7 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
   const cinderColor = new THREE.Color(cCinder);
   const offColor = new THREE.Color(0x050507);
   const lootColor = new THREE.Color(tokenColor('--color-accent', '#E3D7BC')); // bone = information
+  const secretColor = new THREE.Color(tokenColor('--color-ink', '#EDE7DA')); // Wave 4: cold bone — an odd, unlit flame
   const scratchDummy = new THREE.Object3D();
 
   let bobPhase = 0;
@@ -198,7 +199,7 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
       litColor.set(cinderLive ? cCinder : cWarm);
       dimColor.set(cBone).multiplyScalar(0.5);
       for (let i = 0; i < room.sconceInst.count; i++) {
-        if (i === room.lootIndex) continue; // loot glint has its own state
+        if (i === room.lootIndex || i === room.secretIndex) continue; // loot/secret have their own state
         const lit = sim.sconces[i];
         room.sconceInst.setColorAt(i, lit ? (cinderLive ? cinderColor : litColor) : offColor);
       }
@@ -207,6 +208,13 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
         const def = doorDef(sim.door);
         const avail = !!def.loot && !sim.lootTaken;
         room.sconceInst.setColorAt(room.lootIndex, avail ? lootColor : offColor);
+      }
+      // Wave 4: the hidden alcove's sconce — a cold bone flame among the warm
+      // ones while the nook is unopened; dark once the porter found it.
+      if (room.secretIndex >= 0) {
+        const def = doorDef(sim.door);
+        const avail = !!def.secret && !sim.secretFound;
+        room.sconceInst.setColorAt(room.secretIndex, avail ? secretColor : offColor);
       }
       if (room.sconceInst.instanceColor) room.sconceInst.instanceColor.needsUpdate = true;
 

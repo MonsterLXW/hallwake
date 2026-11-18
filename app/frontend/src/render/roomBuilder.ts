@@ -63,6 +63,7 @@ export interface RoomPlan {
   fakeDoorQuad: QuadSpec | null;
   closetQuad: QuadSpec | null; // Wave 1: openable closet door panel
   lootQuad: QuadSpec | null; // Wave 1: loot glint (rides the sconce instance draw)
+  secretQuad: QuadSpec | null; // Wave 4: the odd sconce marking the hidden alcove
   locked: boolean; // Wave 1: exit door stenciled with a padlock
   drawCalls: number;
   triangles: number;
@@ -127,12 +128,15 @@ function wallBoxes(): BoxSpec[] {
   ];
 }
 
+// Wall-mounted sconce quad: hug the nearest wall face, flame toward the room.
+function sconceQuadAt(x: number, z: number): QuadSpec {
+  if (x <= 2) return { x: 0.06, y: 1.8, z, w: 0.5, h: 0.7, rotY: Math.PI / 2 };
+  if (x >= 12) return { x: 13.94, y: 1.8, z, w: 0.5, h: 0.7, rotY: -Math.PI / 2 };
+  return { x, y: 1.8, z: z - 0.06, w: 0.5, h: 0.7, rotY: Math.PI };
+}
+
 function sconceQuadsFor(def: DoorDef): QuadSpec[] {
-  return sconcePositions(def).map((s) => {
-    if (s.x <= 2) return { x: 0.06, y: 1.8, z: s.z, w: 0.5, h: 0.7, rotY: Math.PI / 2 };
-    if (s.x >= 12) return { x: 13.94, y: 1.8, z: s.z, w: 0.5, h: 0.7, rotY: -Math.PI / 2 };
-    return { x: s.x, y: 1.8, z: s.z - 0.06, w: 0.5, h: 0.7, rotY: Math.PI };
-  });
+  return sconcePositions(def).map((s) => sconceQuadAt(s.x, s.z));
 }
 
 function alcoveQuadsFor(a: Archetype): QuadSpec[] {
@@ -180,6 +184,12 @@ export function roomPlanFor(def: DoorDef): RoomPlan {
   const lootQuad: QuadSpec | null = def.loot
     ? { x: geom.loot.x, y: 0.55, z: geom.loot.z, w: 0.45, h: 0.45, rotY: 0 }
     : null;
+  // Wave 4: the hidden alcove's marked sconce — same wall-quad mapping as a
+  // sconce, riding the same instanced draw (scene.ts paints it cold bone so
+  // it reads odd among the warm flames; dark once opened).
+  const secretQuad: QuadSpec | null = def.secret
+    ? sconceQuadAt(def.secret.x, def.secret.z)
+    : null;
 
   const triangles =
     wall.length * 12 + // walls
@@ -188,6 +198,7 @@ export function roomPlanFor(def: DoorDef): RoomPlan {
     aoDiscs.length * DISC_SEG +
     sconces.length * 2 +
     (lootQuad ? 2 : 0) + // loot glint rides the sconce instance draw
+    (secretQuad ? 2 : 0) + // Wave 4: the odd sconce rides it too — no new draw
     alcoves.length * 2 +
     2 + // door
     (hasFake ? 2 : 0) +
@@ -216,6 +227,7 @@ export function roomPlanFor(def: DoorDef): RoomPlan {
     fakeDoorQuad: hasFake ? { x: FAKE_DOOR_POS.x, y: 1.05, z: 9.72, w: DOOR_GAP, h: 2.1, rotY: Math.PI } : null,
     closetQuad,
     lootQuad,
+    secretQuad,
     locked: def.locked === true,
     drawCalls,
     triangles,
@@ -297,6 +309,7 @@ export interface RoomMeshes {
   closetPanel: THREE.InstancedMesh | null; // Wave 1: openable closet door
   closetQuad: QuadSpec | null; // base transform for the panel toggle
   lootIndex: number; // sconceInst instance index of the loot glint, -1 if none
+  secretIndex: number; // Wave 4: sconceInst index of the hidden-alcove sconce, -1 if none
 }
 
 const dummy = new THREE.Object3D();
@@ -364,10 +377,11 @@ export function buildRoomGroup(plan: RoomPlan, quality: Quality, mats: SharedMat
   // --- Sconces: instanced emissive quads (not lights — budget §3). Wave 1:
   // the loot glint rides this same instanced draw as one extra instance. ---
   const lootIndex = plan.lootQuad ? plan.sconceQuads.length : -1;
+  const secretIndex = plan.secretQuad ? plan.sconceQuads.length + (lootIndex >= 0 ? 1 : 0) : -1;
   const sconceInst = new THREE.InstancedMesh(
     new THREE.PlaneGeometry(1, 1),
     mats.sconceMat,
-    plan.sconceQuads.length + (lootIndex >= 0 ? 1 : 0),
+    plan.sconceQuads.length + (lootIndex >= 0 ? 1 : 0) + (secretIndex >= 0 ? 1 : 0),
   );
   plan.sconceQuads.forEach((q, i) => {
     dummy.position.set(q.x, q.y, q.z);
@@ -385,6 +399,15 @@ export function buildRoomGroup(plan: RoomPlan, quality: Quality, mats: SharedMat
     dummy.updateMatrix();
     sconceInst.setMatrixAt(lootIndex, dummy.matrix);
     sconceInst.setColorAt(lootIndex, new THREE.Color(1, 1, 1));
+  }
+  if (plan.secretQuad && secretIndex >= 0) {
+    const q = plan.secretQuad;
+    dummy.position.set(q.x, q.y, q.z);
+    dummy.rotation.set(0, q.rotY, 0);
+    dummy.scale.set(q.w, q.h, 1);
+    dummy.updateMatrix();
+    sconceInst.setMatrixAt(secretIndex, dummy.matrix);
+    sconceInst.setColorAt(secretIndex, new THREE.Color(1, 1, 1));
   }
   sconceInst.instanceMatrix.needsUpdate = true;
   if (sconceInst.instanceColor) sconceInst.instanceColor.needsUpdate = true;
@@ -436,7 +459,7 @@ export function buildRoomGroup(plan: RoomPlan, quality: Quality, mats: SharedMat
   aoInst.instanceMatrix.needsUpdate = true;
   group.add(aoInst);
 
-  return { group, doorMat, fakeDoorMesh, sconceInst, aoInst, closetPanel, closetQuad: plan.closetQuad, lootIndex };
+  return { group, doorMat, fakeDoorMesh, sconceInst, aoInst, closetPanel, closetQuad: plan.closetQuad, lootIndex, secretIndex };
 }
 
 export function disposeRoomGroup(room: RoomMeshes): void {

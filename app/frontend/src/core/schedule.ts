@@ -26,6 +26,10 @@ export interface DoorDef {
   // --- Wave 2 authored extras (features.md): the two new threats ---
   stare?: { x: number; z: number; tellTick: number }; // fixed manifest point + chime tick
   grip?: { spawn: { x: number; z: number } }; // chase spawn corner (fixed slot)
+  // --- Wave 4 authored extra (features.md): the one hidden alcove ---
+  // A marked odd wall sconce at (x, z): E on it opens the alcove once,
+  // granting the authored bonus loot + coins. Fixed table data, no RNG.
+  secret?: { x: number; z: number; loot: ItemType; coins: number };
 }
 
 export interface AABB {
@@ -206,7 +210,14 @@ export const SCHEDULE: DoorDef[] = [
     door: 10, archetype: 'laundry', variant: 'B', event: 'MURMUR', checkpoint: false,
     murmurSpawn: { x: 1, z: 9 },
   },
-  { door: 11, archetype: 'guest', variant: 'B', event: null, checkpoint: false, loot: 'TONIC', coins: 2 },
+  {
+    door: 11, archetype: 'guest', variant: 'B', event: null, checkpoint: false, loot: 'TONIC', coins: 2,
+    // Wave 4: the one hidden alcove, on a safe lore door. The odd cold
+    // sconce sits on the west wall between the two west alcoves — a porter
+    // who sweeps the walls with the lantern finds it; E opens the nook for
+    // a WARD + 6 coins, once per room visit.
+    secret: { x: 0.5, z: 5.5, loot: 'WARD', coins: 6 },
+  },
   {
     door: 12, archetype: 'junction', variant: 'B', event: 'TALLY', checkpoint: false,
     tallyFakeNum: 15,

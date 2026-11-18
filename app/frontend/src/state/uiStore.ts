@@ -10,6 +10,8 @@ import type { HudSnapshot } from '../render/loop';
 import type { RunCard } from '../core/scoring';
 import type { ScoreRow } from '../net/scoresClient';
 import type { Difficulty } from '../core/progression';
+import { makeRoomState } from '../core/sim';
+import { minimapData } from '../core/minimap';
 
 export type Phase = 'attract' | 'playing' | 'paused' | 'dead' | 'run';
 
@@ -76,6 +78,8 @@ const INITIAL_HUD: HudSnapshot = {
   perks: [],
   perkPending: false,
   difficulty: 'NORMAL',
+  minimap: minimapData(makeRoomState(1, 1)), // Wave 4: door 1 plate until the loop pushes
+  shop: null,
 };
 
 export const useUIStore = create<UIState>((set, get) => ({

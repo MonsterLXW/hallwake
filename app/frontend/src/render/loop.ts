@@ -16,6 +16,8 @@ import {
 import type { Archetype } from '../core/schedule';
 import { stareLooking } from '../core/entities';
 import { perkChoices, xpLevel, type Difficulty, type PerkId } from '../core/progression';
+import { minimapData, type MinimapData } from '../core/minimap';
+import { buyOffer, isShopDoor, shopStock, type ShopSession } from '../core/shop';
 import type { EntityKind, Frame, ItemType, SimEvent, SimState } from '../core/types';
 import type { SceneBundle } from './scene';
 import type { PlayerController } from './playerController';
@@ -49,6 +51,10 @@ export interface HudSnapshot {
   perks: PerkId[];
   perkPending: boolean; // a level-up pick is owed -> the overlay opens
   difficulty: Difficulty;
+  // Wave 4 depth surface (features.md): the minimap plate data + the live
+  // vendor screen (null while no keeper is blocking a threshold)
+  minimap: MinimapData;
+  shop: ShopSession | null;
 }
 
 export type RunPhase = 'playing' | 'dead' | 'run';
@@ -90,6 +96,11 @@ export interface LoopHandle {
   reset(seed: number, difficulty: Difficulty): void;
   /** Wave 3: the perk overlay's choice, applied on the next sim tick. */
   choosePerk(p: PerkId): void;
+  /** Wave 4: buy offer index i from the open vendor screen (pure buyOffer on
+      the sim; refused silently if the purse is light or the pack is full). */
+  buyShop(i: number): void;
+  /** Wave 4: step past the keeper; the corridor resumes. */
+  closeShop(): void;
   /** Gamepad begins never fire key/pointer listeners: wake the graph here. */
   wakeAudio(): void;
 }
@@ -116,6 +127,11 @@ function promptFor(sim: SimState): string | null {
   }
   if (def.coins && !sim.coinsTaken && Math.hypot(p.x - geom.coins.x, p.z - geom.coins.z) <= INTERACT_RANGE) {
     return 'COINS';
+  }
+  // Wave 4: the hidden alcove's marked sconce — the prompt invites the
+  // lantern sweep that finds it; a full pack refuses the visit.
+  if (def.secret && !sim.secretFound && Math.hypot(p.x - def.secret.x, p.z - def.secret.z) <= INTERACT_RANGE) {
+    return sim.inv.length < 4 ? 'ODD SCONCE' : 'PACK FULL';
   }
   if (def.closet) {
     const cc = { x: (def.closet.x0 + def.closet.x1) / 2, z: (def.closet.z0 + def.closet.z1) / 2 };
@@ -261,6 +277,10 @@ export function startLoop(deps: LoopDeps): LoopHandle {
   const autopilot = deps.autopilot ? createAutopilot() : null;
   const events: SimEvent[] = [];
   let queuedPerk: PerkId | null = null; // Wave 3: overlay choice awaiting the next tick
+  // Wave 4: the threshold keeper's screen. Opened when a human porter walks
+  // through door 8/16/24; the corridor waits (like the perk plate) until the
+  // screen closes. The autopilot never owes a visit — it banks no coins.
+  let shopSession: ShopSession | null = null;
 
   // T3 integration (handoff): the entity host keeps EntityGroup in sync with
   // the sim and owns the SimEvent -> audio dispatch; the graph arms its
@@ -304,6 +324,7 @@ export function startLoop(deps: LoopDeps): LoopHandle {
     const perkPending =
       !deps.autopilot && sim.alive && !sim.finished && xpLevel(sim.xp) > sim.perks.length;
     const corridorFrozen = perkPending && queuedPerk === null;
+    const shopFrozen = shopSession !== null;
 
     if (!deps.isPaused()) {
       if (corridorFrozen) {
@@ -317,6 +338,8 @@ export function startLoop(deps: LoopDeps): LoopHandle {
           for (const e of sim.events) events.push(e);
         }
         acc = 0;
+      } else if (shopFrozen) {
+        acc = 0; // Wave 4: MOTT counts the purse; the corridor waits
       } else {
         acc += dt;
         let steps = 0;
@@ -333,6 +356,16 @@ export function startLoop(deps: LoopDeps): LoopHandle {
           steps++;
         }
         if (acc > DT * MAX_CATCHUP_STEPS) acc = 0; // drop the backlog, never spiral
+        // Wave 4: walking through a keeper's threshold (8/16/24) opens the
+        // vendor screen; the next frame holds the corridor still.
+        if (!deps.autopilot && shopSession === null) {
+          for (const e of events) {
+            if (e.type === 'door_open' && isShopDoor(e.door)) {
+              shopSession = { door: e.door, sold: [] };
+              break;
+            }
+          }
+        }
       }
     }
 
@@ -344,7 +377,7 @@ export function startLoop(deps: LoopDeps): LoopHandle {
     events.length = 0;
 
     // footstep thuds on the door bus, cadence from walked distance
-    if (sim.alive && !deps.isPaused() && !corridorFrozen) {
+    if (sim.alive && !deps.isPaused() && !corridorFrozen && !shopFrozen) {
       const speed = Math.hypot(sim.player.vel.x, sim.player.vel.z);
       walkDist += speed * dt;
       if (walkDist >= 1.35) {
@@ -384,6 +417,8 @@ export function startLoop(deps: LoopDeps): LoopHandle {
         perks: [...sim.perks],
         perkPending: sim.alive && !sim.finished && xpLevel(sim.xp) > sim.perks.length,
         difficulty: sim.difficulty,
+        minimap: minimapData(sim),
+        shop: shopSession ? { door: shopSession.door, sold: [...shopSession.sold] } : null,
       });
     }
     deps.onPhase(sim.finished ? 'run' : sim.alive ? 'playing' : 'dead');
@@ -402,11 +437,29 @@ export function startLoop(deps: LoopDeps): LoopHandle {
     reset(seed: number, difficulty: Difficulty): void {
       sim = createInitialState(seed, difficulty);
       queuedPerk = null;
+      shopSession = null;
       acc = 0;
       walkDist = 0;
     },
     choosePerk(p: PerkId): void {
       queuedPerk = p;
+    },
+    buyShop(i: number): void {
+      if (!shopSession) return;
+      if (shopSession.sold.includes(i)) return;
+      const offer = shopStock(shopSession.door)[i];
+      if (!offer) return;
+      const next = buyOffer(sim, offer);
+      if (next === null) return; // purse too light / pack full — the screen says why
+      sim = next;
+      shopSession = { ...shopSession, sold: [...shopSession.sold, i] };
+      events.push({ type: 'shop', item: offer.item, door: shopSession.door, visible: true });
+      deps.controller.clearEdges(); // the number keys that bought must not also drink the kit
+    },
+    closeShop(): void {
+      if (!shopSession) return;
+      shopSession = null;
+      deps.controller.clearEdges();
     },
     wakeAudio(): void {
       if (audio.ensure()) audio.startAmbience();
