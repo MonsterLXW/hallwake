@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HALLWAKE — Pitch</title>
+<style>
+/* HALLWAKE identity tokens (app/frontend/src/identity/tokens.css) — fonts fall
+   back to the same stacks the product declares; deck ships zero external assets. */
+:root{
+  color-scheme:dark;
+  --color-bg:#0A0A0E; --color-plate:#101016; --color-plate-sunken:#060609;
+  --color-rule:#23232E; --color-rule-strong:#3C3C4A;
+  --color-ink:#EDE7DA; --color-ink-secondary:#BFB8A9; --color-ink-muted:#857E70;
+  --signal-gaunt:#F2A63C; --signal-tally:#D6574C; --signal-cinder:#58B4E8; --signal-murmur:#C9C6BE;
+  --oil-high:#E3D7BC; --oil-low:#B5A888;
+  --sweep-glow:rgba(227,215,188,.16); --sweep-glow-mid:rgba(227,215,188,.05);
+  --font-display:"Big Shoulders Display","Arial Narrow",system-ui,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  --font-prose:"Courier Prime","Courier New",ui-monospace,monospace;
+  --tracking-stencil:.04em; --tracking-label:.1em;
+  --ease-out:cubic-bezier(.2,0,0,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--color-bg);color:var(--color-ink);font-family:var(--font-mono);
+  font-size:16px;line-height:1.45;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,.slide:focus-visible{outline:2px solid var(--oil-high);outline-offset:2px}
+
+/* ---------- deck chrome ---------- */
+.chrome{position:fixed;left:0;right:0;display:flex;justify-content:space-between;align-items:center;
+  padding:10px 24px;font-size:12px;letter-spacing:var(--tracking-label);text-transform:uppercase;
+  color:var(--color-ink-muted);z-index:30;pointer-events:none}
+.chrome.top{top:0;border-bottom:1px solid var(--color-rule)}
+.chrome.bottom{bottom:0;border-top:1px solid var(--color-rule)}
+.chrome .brand{font-family:var(--font-display);font-size:15px;font-weight:800;letter-spacing:.14em;
+  color:var(--color-ink-secondary)}
+.chrome .nav{pointer-events:auto;display:flex;gap:14px;align-items:center}
+.chrome .nav button{border:1px solid var(--color-rule-strong);padding:3px 10px;font-size:12px;
+  letter-spacing:var(--tracking-label);color:var(--color-ink-secondary)}
+.chrome .nav button:hover{border-color:var(--oil-high);color:var(--color-ink)}
+#progress{position:fixed;left:0;bottom:0;height:2px;background:var(--oil-high);z-index:31;
+  transition:width .3s var(--ease-out)}
+
+/* ---------- slides ---------- */
+#deck{position:fixed;inset:0}
+.slide{position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;
+  padding:64px clamp(24px,6vw,96px);overflow:hidden}
+.slide.on{display:flex}
+.kicker{font-size:12px;letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--signal-tally)}
+.kicker.bone{color:var(--color-ink-muted)}
+h1{font-family:var(--font-display);font-weight:900;text-transform:uppercase;letter-spacing:var(--tracking-stencil);
+  line-height:1;font-size:clamp(56px,10vh,120px)}
+h2{font-family:var(--font-display);font-weight:800;text-transform:uppercase;letter-spacing:var(--tracking-stencil);
+  line-height:1.02;font-size:clamp(34px,5.6vh,58px);margin-bottom:8px}
+h3{font-family:var(--font-mono);font-size:13px;font-weight:700;letter-spacing:var(--tracking-label);
+  text-transform:uppercase;color:var(--color-ink-secondary);margin-bottom:6px}
+p.lede{font-size:clamp(16px,2.1vh,20px);color:var(--color-ink-secondary);max-width:72ch}
+.prose{font-family:var(--font-prose)}
+.rule{border:0;border-top:1px solid var(--color-rule);margin:20px 0}
+.plate{background:var(--color-plate);border:1px solid rgba(237,231,218,.14);padding:16px 18px}
+.sunken{background:var(--color-plate-sunken)}
+.mono-num{font-variant-numeric:tabular-nums}
+.dim{color:var(--color-ink-muted)}
+.sect{position:absolute;top:56px;right:clamp(24px,6vw,96px);font-size:12px;letter-spacing:var(--tracking-label);
+  text-transform:uppercase;color:var(--color-ink-muted)}
+
+/* door row motif (attract screen brand graphic) */
+.doorrow{display:grid;grid-template-columns:repeat(24,1fr);border-bottom:1px solid var(--color-rule-strong);
+  position:relative;overflow:hidden;margin:22px 0 10px}
+.doorrow .d{font-family:var(--font-display);font-weight:900;font-size:clamp(16px,2.6vh,30px);
+  letter-spacing:var(--tracking-stencil);text-align:center;padding:10px 0;color:var(--color-ink);
+  border-right:1px solid var(--color-rule)}
+.doorrow .d:last-child{border-right:0}
+.doorrow .d.ev-tally{color:var(--signal-tally)}
+.doorrow .d.ev-gaunt{color:var(--signal-gaunt)}
+.doorrow .d.ev-cinder{color:var(--signal-cinder)}
+.doorrow .d.ev-murmur{color:var(--signal-murmur)}
+.doorrow .d.finale{color:var(--signal-cinder);border-right:0;
+  background:linear-gradient(90deg,var(--signal-cinder) 0 50%,var(--signal-gaunt) 50% 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.cp{display:grid;grid-template-columns:repeat(24,1fr);margin-top:6px}
+.cp i{display:block;text-align:center;font-style:normal;font-size:11px;color:var(--color-ink-muted)}
+.cp i::before{content:"·"}
+.cp i.cp-on::before{content:"▮";color:var(--oil-high)}
+.sweep::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120px 100% at 0% 50%,var(--sweep-glow) 0%,var(--sweep-glow-mid) 55%,transparent 75%);
+  animation:sweep 6s linear infinite}
+@keyframes sweep{from{transform:translateX(-140px)}to{transform:translateX(calc(100% + 140px))}}
+@media (prefers-reduced-motion:reduce){.sweep::after{animation:none;left:0;width:140px}}
+
+/* grids & tables */
+.cols{display:grid;gap:16px;margin-top:18px}
+.cols.c3{grid-template-columns:repeat(3,1fr)}
+.cols.c2{grid-template-columns:repeat(2,1fr)}
+.cols.c4{grid-template-columns:repeat(4,1fr)}
+@media (max-width:900px){.cols.c3,.cols.c2,.cols.c4{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse;margin-top:14px;font-size:clamp(13px,1.7vh,16px)}
+th{font-size:11px;letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--color-ink-muted);
+  text-align:left;padding:8px 10px;border-bottom:1px solid var(--color-rule-strong)}
+td{padding:9px 10px;border-bottom:1px solid var(--color-rule);vertical-align:top;color:var(--color-ink-secondary)}
+td.ent{font-family:var(--font-display);font-weight:800;font-size:1.25em;letter-spacing:var(--tracking-stencil);color:var(--color-ink)}
+td.ent.g{color:var(--signal-gaunt)} td.ent.t{color:var(--signal-tally)}
+td.ent.c{color:var(--signal-cinder)} td.ent.m{color:var(--signal-murmur)}
+td.doors{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--color-ink)}
+ul{list-style:none}
+li{margin:0 0 10px;padding-left:18px;position:relative;color:var(--color-ink-secondary)}
+li::before{content:"—";position:absolute;left:0;color:var(--color-ink-muted)}
+.stat{font-family:var(--font-display);font-weight:900;font-size:clamp(40px,7vh,72px);line-height:1;
+  letter-spacing:var(--tracking-stencil);font-variant-numeric:tabular-nums}
+.stat small{display:block;font-family:var(--font-mono);font-weight:400;font-size:12px;
+  letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--color-ink-muted);margin-top:8px}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:18px;font-size:13px;
+  letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--color-ink-secondary)}
+.flow b{color:var(--color-ink);font-weight:700}
+.flow span{color:var(--color-rule-strong)}
+.quote{font-family:var(--font-prose);font-size:clamp(18px,2.6vh,26px);line-height:1.6;max-width:62ch;color:var(--color-ink)}
+.hint{font-size:12px;letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--color-ink-muted)}
+.breathe{animation:breathe 2.4s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.45}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.breathe{animation:none;opacity:1}}
+</style>
+</head>
+<body>
+<div class="chrome top"><span class="brand">HALLWAKE</span><span id="tagline">learn the schedule or be learned by it</span></div>
+<div id="deck">
+
+<!-- 1 · TITLE -->
+<section class="slide on" id="s1">
+  <div class="kicker">Cloud9 × JetBrains · Sky's The Limit 2026 · Category 3 — booth mini game</div>
+  <h1>Hallwake</h1>
+  <div class="doorrow sweep" aria-label="doors 01 to 24">
+    <span class="d">01</span><span class="d">02</span><span class="d">03</span><span class="d">04</span><span class="d ev-tally">05</span><span class="d">06</span><span class="d ev-gaunt">07</span><span class="d">08</span><span class="d ev-cinder">09</span><span class="d ev-murmur">10</span><span class="d">11</span><span class="d ev-tally">12</span><span class="d ev-gaunt">13</span><span class="d">14</span><span class="d ev-cinder">15</span><span class="d ev-murmur">16</span><span class="d">17</span><span class="d ev-tally">18</span><span class="d ev-gaunt">19</span><span class="d">20</span><span class="d ev-cinder">21</span><span class="d ev-murmur">22</span><span class="d">23</span><span class="d finale">24</span>
+  </div>
+  <div class="cp" aria-hidden="true"><i class="cp-on"></i><i></i><i></i><i></i><i class="cp-on"></i><i></i><i></i><i></i><i class="cp-on"></i><i></i><i></i><i></i><i class="cp-on"></i><i></i><i></i><i></i><i class="cp-on"></i><i></i><i></i><i></i><i class="cp-on"></i><i></i><i></i><i></i></div>
+  <p class="quote" style="margin-top:26px">Learn the schedule — or be learned by it.</p>
+  <p class="hint breathe" style="margin-top:22px">First-person browser horror · original IP · press → to begin</p>
+</section>
+
+<!-- 2 · PROBLEM -->
+<section class="slide" id="s2"><span class="sect">02 · the problem</span>
+  <div class="kicker">The problem</div>
+  <h2>Booth mini games die in thirty seconds</h2>
+  <div class="cols c3">
+    <div class="plate"><h3>Forgettable</h3><p class="lede">A passerby tries once, feels nothing, walks on. Nothing pulls them back to the leaderboard.</p></div>
+    <div class="plate"><h3>Unfair horror</h3><p class="lede">Random scares punish first-timers and veterans alike. Dying to dice reads as a broken game, not a hard one.</p></div>
+    <div class="plate"><h3>Undemoable</h3><p class="lede">Unscripted games can't be filmed reliably — every take of the demo video is a different roll.</p></div>
+  </div>
+  <p class="quote" style="margin-top:26px">If the player can't learn, the booth can't win.</p>
+</section>
+
+<!-- 3 · ANSWER -->
+<section class="slide" id="s3"><span class="sect">03 · the answer</span>
+  <div class="kicker">The answer</div>
+  <h2>Learnable horror, not luck</h2>
+  <p class="quote">Every scare is scripted to a fixed door number and telegraphed with a readable tell. No unreadable RNG. Survival is knowledge — and the leaderboard rewards knowledge, not dice.</p>
+  <div class="flow"><b>attract</b><span>▸</span><b>door</b><span>▸</span><b>tell</b><span>▸</span><b>counterplay</b><span>▸</span><b>death</b><span>▸</span><b>checkpoint retry</b><span>▸</span><b>run card</b><span>▸</span><b>leaderboard</b><span>▸</span><b>attract</b></div>
+  <div class="cols c3" style="margin-top:22px">
+    <div class="plate"><h3>Same corridor, every run</h3><p class="lede">The 24-door table is authored data. The sim adds no randomness — a player who saw it once beats it every time.</p></div>
+    <div class="plate"><h3>Checkpoints, not punishment</h3><p class="lede">Six checkpoint doors. Death costs seconds, never the whole run — first-timers keep coming back.</p></div>
+    <div class="plate"><h3>Reproducible on camera</h3><p class="lede">Deterministic events make the demo video identical take-after-take. The manifesto is also the film plan.</p></div>
+  </div>
+</section>
+
+<!-- 4 · SCHEDULE -->
+<section class="slide" id="s4"><span class="sect">04 · the schedule</span>
+  <div class="kicker">The fixed 24-door table</div>
+  <h2>The corridor is the design document</h2>
+  <div class="doorrow" aria-label="24 door schedule colored by entity">
+    <span class="d">01</span><span class="d">02</span><span class="d">03</span><span class="d">04</span><span class="d ev-tally">05</span><span class="d">06</span><span class="d ev-gaunt">07</span><span class="d">08</span><span class="d ev-cinder">09</span><span class="d ev-murmur">10</span><span class="d">11</span><span class="d ev-tally">12</span><span class="d ev-gaunt">13</span><span class="d">14</span><span class="d ev-cinder">15</span><span class="d ev-murmur">16</span><span class="d">17</span><span class="d ev-tally">18</span><span class="d ev-gaunt">19</span><span class="d">20</span><span class="d ev-cinder">21</span><span class="d ev-murmur">22</span><span class="d">23</span><span class="d finale">24</span>
+  </div>
+  <div class="cp" aria-hidden="true"><i class="cp-on">1</i><i></i><i></i><i></i><i class="cp-on">5</i><i></i><i></i><i></i><i class="cp-on">9</i><i></i><i></i><i></i><i class="cp-on">13</i><i></i><i></i><i></i><i class="cp-on">17</i><i></i><i></i><i></i><i class="cp-on">21</i><i></i><i></i><i></i></div>
+  <div class="cols c4" style="margin-top:20px">
+    <div class="plate"><h3 style="color:var(--signal-tally)">Tally · 5 · 12 · 18</h3><p class="lede">the door-number trickster</p></div>
+    <div class="plate"><h3 style="color:var(--signal-gaunt)">Gaunt · 7 · 13 · 19</h3><p class="lede">the stitched silhouette</p></div>
+    <div class="plate"><h3 style="color:var(--signal-cinder)">Cinder · 9 · 15 · 21</h3><p class="lede">the flame-wraith that eats light</p></div>
+    <div class="plate"><h3 style="color:var(--signal-murmur)">Murmur · 10 · 16 · 22</h3><p class="lede">the thing that moves in darkness</p></div>
+  </div>
+  <p class="lede" style="margin-top:18px">Six checkpoint blocks of four (▮ 1 · 5 · 9 · 13 · 17 · 21). Safe rooms refill lantern oil and carry lore cards (doors 3 · 11 · 20). Door 24 finale: a CINDER blackout and a GAUNT chase in one room.</p>
+</section>
+
+<!-- 5 · BESTIARY -->
+<section class="slide" id="s5"><span class="sect">05 · the bestiary</span>
+  <div class="kicker">Four original entities · tell → mechanic → counterplay</div>
+  <h2>Every scare announces itself</h2>
+  <table>
+    <tr><th>Entity</th><th>Tell (always fires first)</th><th>Mechanic</th><th>Counterplay</th></tr>
+    <tr><td class="ent g">Gaunt</td><td>every light flickers twice, burns amber; a door slams</td><td>6-second sweep along a fixed path</td><td>step into the pale-marked alcove, stay still until amber fades</td></tr>
+    <tr><td class="ent m">Murmur</td><td>whispering grows when you face it; lantern beam sputters</td><td>advances one step per second outside your light cone</td><td>keep the beam on it, back toward the exit — oil management <em>is</em> the counterplay</td></tr>
+    <tr><td class="ent t">Tally</td><td>fresh chalk marks on the frame; the numeral glows red one beat</td><td>spawns a duplicate fake door — opening it is death</td><td>the HUD door log shows the expected number; the real door matches, the fake never does</td></tr>
+    <tr><td class="ent c">Cinder</td><td>all flames turn blue; rising hiss; oil drains 4× faster</td><td>lights die one by one; lantern radius shrinks toward zero</td><td>relight the sconces in the scratch order shown in-room to banish it</td></tr>
+  </table>
+  <p class="lede" style="margin-top:16px">The ambitious differentiator: <b>the door number itself is an entity</b>. TALLY edits the doors — the numbers are diegetic, not level dressing.</p>
+</section>
+
+<!-- 6 · IDENTITY -->
+<section class="slide" id="s6"><span class="sect">06 · the identity</span>
+  <div class="kicker">The night porter's kit</div>
+  <h2>Bone is information. Color is danger.</h2>
+  <div class="cols c2">
+    <div class="plate">
+      <h3>A diegetic HUD, not an overlay</h3>
+      <ul>
+        <li>Stenciled door numeral, bottom-right — turns chalk-red for one beat on a TALLY tell</li>
+        <li>Door log as a ruled ledger, top-left — the TALLY counterplay surface, always on</li>
+        <li>Brass oil tube, bottom-left — ticks at 20% / 60%, 1 Hz alarm pulse below 20%</li>
+        <li>Tell glyphs center-bottom: slit · hollow ring · four-stroke tally · flame outline</li>
+      </ul>
+    </div>
+    <div class="plate">
+      <h3>Identity rules, enforced</h3>
+      <ul>
+        <li>Three voices: signage / instruments / typewriter — no text in the wrong voice</li>
+        <li>Radius 0, flat plates, no glass, no neon, no shadow-glow — elevation is plate + hairline</li>
+        <li>The four signal hues are CVD-validated (ΔE ≥ 37) and never decorative</li>
+        <li>Reduced motion stays fair: tells crossfade to the same steady state; windows never change</li>
+      </ul>
+    </div>
+  </div>
+  <p class="quote" style="margin-top:22px">A UI that withholds all color until the corridor turns hostile — the identity <em>is</em> the thesis.</p>
+</section>
+
+<!-- 7 · TECH -->
+<section class="slide" id="s7"><span class="sect">07 · the tech</span>
+  <div class="kicker">Deterministic core · enforced budget</div>
+  <h2>A real 3D game, proven by tests</h2>
+  <div class="cols c2">
+    <div class="plate">
+      <h3>The sim owns everything</h3>
+      <ul>
+        <li>Fixed-timestep TypeScript core: movement, door FSM, entity schedules and hitboxes, oil economy, scoring</li>
+        <li>Golden-trace tests: double-run identical state, seeds ignored, source scan proves zero Math.random in the core</li>
+        <li>Raw Three.js scene graph driven by the sim; React renders HUD and kiosk screens only</li>
+      </ul>
+    </div>
+    <div class="plate">
+      <h3>Perf budget, enforced not aspirational</h3>
+      <ul>
+        <li>Merged-room scene: ≤ 7 draw calls per room, 150 global cap — asserted over 24 doors × 2 variants × 3 quality tiers</li>
+        <li>One lantern spotlight + at most two event lights; zero shadow maps at any quality</li>
+        <li>All art procedural canvas (wood grain, plaster, tile, numerals); all sound WebAudio-synthesized — original by construction</li>
+      </ul>
+    </div>
+  </div>
+  <p class="lede" style="margin-top:18px">Pointer-lock WASD + mouse + E, gamepad on the attract screen, FastAPI + SQLite leaderboard with server-validated scores — and the game runs fully with the backend down (localStorage mirror).</p>
+</section>
+
+<!-- 8 · LLM FIREWALL -->
+<section class="slide" id="s8"><span class="sect">08 · the llm firewall</span>
+  <div class="kicker">AI where it helps · absent where it would hurt</div>
+  <h2>The LLM writes flavor. It never touches the game.</h2>
+  <div class="cols c3">
+    <div class="plate"><h3>Flavor only</h3><p class="lede">Local vLLM on the LAN (keyless) writes lore cards, death epitaphs and run-card lines. Output is display-only DOM text — never parsed back into game state.</p></div>
+    <div class="plate"><h3>Hard firewall</h3><p class="lede">0.8 s timeout, one request at a time, a busy slot never queues — it degrades instantly to 32 hand-authored canned lines per kind. Canned text is first-class content, not an error state.</p></div>
+    <div class="plate"><h3>Zero paid APIs</h3><p class="lede">The game is 100% playable and fully scored with the LLM down. Dependency and scope audits confirm no paid-API reference anywhere in shipped code.</p></div>
+  </div>
+  <p class="quote" style="margin-top:24px">The sim never reads LLM output. That sentence is a test, not a promise.</p>
+</section>
+
+<!-- 9 · IP + BOOTH -->
+<section class="slide" id="s9"><span class="sect">09 · original ip · booth ready</span>
+  <div class="kicker">Safe to ship on a convention floor</div>
+  <h2>Original by construction, kiosk by design</h2>
+  <div class="cols c2">
+    <div class="plate">
+      <h3>Original IP, gated in CI</h3>
+      <ul>
+        <li>Coined title; zero third-party names, assets or entity names anywhere</li>
+        <li><span class="mono-num">scripts/ip-check.sh</span> greps repo, comments and the video script for 15 banned terms — runs in CI, exit 0</li>
+        <li>Procedural art + synthesized audio: nothing to license, nothing to strike</li>
+      </ul>
+    </div>
+    <div class="plate">
+      <h3>Booth deployment, verified</h3>
+      <ul>
+        <li>One-command start script; loopback-only binds by default (backend never exposed to LAN)</li>
+        <li>Kiosk idle-reset re-arms on every phase entry — the booth never sticks off-attract</li>
+        <li>Quality auto-detect probes real fps and steps the preset down below 45 until it holds 60</li>
+        <li>4% overscan safe area; type floors sized for a booth TV at three metres</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 10 · RESULTS -->
+<section class="slide" id="s10"><span class="sect">10 · results</span>
+  <div class="kicker">Verified, not claimed</div>
+  <h2>The numbers behind the game</h2>
+  <div class="cols c4" style="margin-top:24px">
+    <div class="plate sunken"><div class="stat">999<small>frontend tests green</small></div></div>
+    <div class="plate sunken"><div class="stat">55<small>backend tests green</small></div></div>
+    <div class="plate sunken"><div class="stat">24/24<small>autopilot doors · 0 deaths</small></div></div>
+    <div class="plate sunken"><div class="stat">57<small>fps steady · 0 console errors</small></div></div>
+  </div>
+  <div class="cols c3" style="margin-top:20px">
+    <div class="plate"><h3>Security</h3><p class="lede">Zero open Critical/High. One firewall-queue Critical fixed with a regression test; two Medium findings stay closed behind the loopback-only posture.</p></div>
+    <div class="plate"><h3>Build</h3><p class="lede">800 kB JS / 221 kB gzip — a kiosk loads it instantly; the >500 kB chunk warning is expected for a Three.js game.</p></div>
+    <div class="plate"><h3>Browser gate</h3><p class="lede">Headless autopilot plays doors 1–24 hands-free; idle-reset and the amber GAUNT tell verified on screen with screenshots.</p></div>
+  </div>
+</section>
+
+<!-- 11 · RUBRIC -->
+<section class="slide" id="s11"><span class="sect">11 · rubric fit</span>
+  <div class="kicker">Five criteria · equally weighted</div>
+  <h2>Why it scores, axis by axis</h2>
+  <table>
+    <tr><th>Criterion</th><th>The evidence</th></tr>
+    <tr><td class="ent">Technological Implementation</td><td>A real first-person 3D game in the browser: deterministic sim with golden traces, test-enforced perf budget, FastAPI + SQLite leaderboard, LLM firewall — built across WebStorm, PyCharm, DataGrip and Junie.</td></tr>
+    <tr><td class="ent">Design</td><td>One loop end-to-end (attract → run → die → retry → leaderboard → attract), one resource (oil) with four uses, one coherent identity. Small and finished, not broad and half-built.</td></tr>
+    <tr><td class="ent">Potential Impact</td><td>Built for exactly this category: 3–5 minute kiosk sessions, checkpoints for first-timers, a leaderboard for repeat crowds. The audience is event booth floors — Cloud9's own use case — plus the corridor-horror web audience.</td></tr>
+    <tr><td class="ent">Quality of the Idea</td><td>"Learnable horror, no unreadable RNG" is a design essay a judge can quote — and the door number itself is an entity. Nobody else in this contest builds a horror mini game at all.</td></tr>
+    <tr><td class="ent">Presentation</td><td>Scripted, deterministic events make the sub-three-minute video reproducible take-after-take; death → retry → mastery is a ready-made story arc.</td></tr>
+  </table>
+</section>
+
+<!-- 12 · ASK -->
+<section class="slide" id="s12"><span class="sect">12 · the ask</span>
+  <div class="kicker">The ask</div>
+  <h2>Put HALLWAKE on the booth floor</h2>
+  <div class="cols c2">
+    <div class="plate">
+      <h3>What we need</h3>
+      <ul>
+        <li>A booth slot, power, and a browser — everything else is done and running</li>
+        <li>Judges: the repo, the sub-three-minute video, and this kiosk, live</li>
+      </ul>
+    </div>
+    <div class="plate">
+      <h3>What's next (parked, not promised)</h3>
+      <ul>
+        <li>Two-player asymmetric co-op corridor — the strongest variant we scoped out for scope reasons</li>
+        <li>Second floor, more entities — the schedule table makes it a data change, not a rewrite</li>
+      </ul>
+    </div>
+  </div>
+  <p class="quote" style="margin-top:26px">Learn the schedule — or be learned by it.</p>
+  <p class="hint" style="margin-top:14px">HALLWAKE · original IP · Cloud9 × JetBrains Sky's The Limit 2026 · Category 3</p>
+</section>
+
+</div>
+<div class="chrome bottom">
+  <span id="counter" class="mono-num">01 / 12</span>
+  <span class="nav"><button id="prev" aria-label="previous slide">◂ prev</button><button id="next" aria-label="next slide">next ▸</button></span>
+  <span>← → space · home / end</span>
+</div>
+<div id="progress"></div>
+<script>
+(function(){
+  var slides=[].slice.call(document.querySelectorAll('.slide')),i=0,n=slides.length;
+  var counter=document.getElementById('counter'),bar=document.getElementById('progress');
+  function pad(x){return (x<10?'0':'')+x}
+  function show(j){
+    i=Math.max(0,Math.min(n-1,j));
+    slides.forEach(function(s,k){s.classList.toggle('on',k===i)});
+    counter.textContent=pad(i+1)+' / '+pad(n);
+    bar.style.width=((i+1)/n*100)+'%';
+    if(history.replaceState)history.replaceState(null,'','#'+(i+1));
+  }
+  document.getElementById('next').addEventListener('click',function(){show(i+1)});
+  document.getElementById('prev').addEventListener('click',function(){show(i-1)});
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){e.preventDefault();show(i+1)}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();show(i-1)}
+    else if(e.key==='Home'){show(0)}else if(e.key==='End'){show(n-1)}
+  });
+  var h=parseInt((location.hash||'').slice(1),10);
+  show(isNaN(h)?0:h-1);
+})();
+</script>
+</body>
+</html>
