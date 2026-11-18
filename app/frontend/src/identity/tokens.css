@@ -1,19 +1,187 @@
-/* Placeholder identity tokens — hf-design replaces this file wholesale
-   in phase 6 (design-brief mode). Do not hardcode design values elsewhere. */
+/* GCRadar identity tokens — the single design source (plan/design-brief.md).
+   Every UI task imports ONLY this file. Dark is the default theme (booth/TV);
+   light is opt-in via <html data-theme="light">. Contrast math + palette
+   validation live in the brief. No Riot IP: self-hosted OFL fonts only. */
+
+/* ---- Fonts (self-hosted variable woff2, latin; OFL licenses in /fonts) ---- */
+@font-face {
+  font-family: "Archivo";
+  src: url("/fonts/archivo-var.woff2") format("woff2");
+  font-weight: 400 800;
+  font-stretch: 100% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/jbmono-var.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("/fonts/ss4-normal.woff2") format("woff2");
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("/fonts/ss4-italic.woff2") format("woff2");
+  font-weight: 400 600;
+  font-style: italic;
+  font-display: swap;
+}
+
 :root {
-  --color-bg: #ffffff;
-  --color-fg: #111111;
-  --color-accent: #111111;
-  --font-display: Georgia, "Times New Roman", serif;
-  --font-body: system-ui, sans-serif;
-  --font-mono: ui-monospace, Consolas, monospace;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 16px;
-  --space-4: 24px;
-  --space-5: 40px;
-  --space-6: 64px;
-  --radius: 0px;
-  --shadow: none;
-  --motion: 180ms cubic-bezier(0.2, 0, 0, 1);
+  color-scheme: dark;
+
+  /* ---- Surfaces & ink (dark default) ---- */
+  --color-bg:            #0E1113;
+  --color-surface:       #161A1D;
+  --color-surface-raised:#1B2024;
+  --color-surface-sunken:#0A0C0E;
+  --color-rule:          #262C31;  /* hairline grid — decorative only */
+  --color-rule-strong:   #3A4248;  /* chart baselines / axis */
+  --color-ink:           #F2F1EC;  /* 16.75:1 on bg */
+  --color-ink-secondary: #C4C9CD;  /* 11.35:1 */
+  --color-ink-muted:     #8D949B;  /* 6.17:1 — AA for meta/axis text */
+
+  /* ---- Signal & polarity (one axis: favorable ↔ unfavorable) ---- */
+  --color-accent:        #F2A93B;  /* signal amber: selection/focus/magnitude — 9.49:1 */
+  --color-accent-ink:    #0E1113;  /* text on amber fills */
+  --color-accent-dim:    #C98A2A;  /* hover/pressed amber */
+  --color-favor:         #2EA87F;  /* pick / synergy mark (chart) */
+  --color-favor-text:    #4CC79A;  /* W, +values — 8.97:1 */
+  --color-unfavor:       #E5604F;  /* ban / counter mark (chart) */
+  --color-unfavor-text:  #F0705E;  /* L, −values — 6.48:1 */
+  --color-neutral-mid:   #333A40;  /* diverging midpoint */
+  --color-focus:         #F2A93B;
+
+  /* ---- Chart: diverging scale (matchup matrix heat) ---- */
+  --chart-div-n2: #E5604F;
+  --chart-div-n1: #964B44;
+  --chart-div-0:  #333A40;
+  --chart-div-p1: #31715F;
+  --chart-div-p2: #2EA87F;
+
+  /* ---- Chart: amber ordinal ramp (pick rate / confidence / threat) ---- */
+  --chart-seq-1: #6B4E14;
+  --chart-seq-2: #8A6A1E;
+  --chart-seq-3: #B08A2E;
+  --chart-seq-4: #D2A845;
+  --chart-seq-5: #F2C25E;
+
+  /* ---- Chart chrome & geometry ---- */
+  --chart-grid:  var(--color-rule);
+  --chart-axis:  var(--color-rule-strong);
+  --chart-cell:  28px;   /* matrix cell */
+  --chart-bar:   10px;   /* ordinal bar height */
+  --chart-gap:   2px;    /* surface gap between fills */
+  --chart-line:  2px;
+  --chart-marker: 8px;
+
+  /* ---- Team accents (teams.accent) — identity chrome, never chart series;
+          always paired with the team's text tag, max two on screen ---- */
+  --team-1:  #C26869; --team-2:  #BD7042; --team-3:  #AA7D25; --team-4:  #8B8C2E;
+  --team-5:  #5F9752; --team-6:  #209C7B; --team-7:  #009AA1; --team-8:  #2092BE;
+  --team-9:  #5C86CB; --team-10: #8679C6; --team-11: #A56EB1; --team-12: #B96890;
+
+  /* ---- Type: three voices, strict roles (brief §3) ---- */
+  --font-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --font-ui:      "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --font-prose:   "Source Serif 4", Georgia, "Times New Roman", serif;
+
+  --text-2xs: 10px;  /* mono micro-labels: uppercase, +0.1em */
+  --text-xs:  12px;
+  --text-sm:  14px;
+  --text-base:16px;
+  --text-lg:  20px;
+  --text-xl:  26px;
+  --text-2xl: 34px;
+  --text-3xl: 48px;  /* score numerals: Archivo 800, stretch 112% */
+  --text-display: 64px; /* masthead */
+
+  --leading-tight: 1.05;
+  --leading-ui:    1.35;
+  --leading-body:  1.55;
+  --leading-prose: 1.6;
+  --measure-prose: 68ch;
+  --tracking-display: -0.02em;
+  --tracking-label:    0.1em;
+  --stretch-display: 112%;
+
+  /* ---- Space (8px base) & composition ---- */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px; --space-9: 96px;
+  --grid-max: 1440px;
+  --grid-gutter: 20px;
+  --rail-w: 220px;
+  --row-h: 44px;      /* ledger row */
+  --gutter-phone: 16px;
+
+  /* ---- Borders, radii, elevation: ruled ledger, radius 0, no shadows ---- */
+  --radius-0: 0px;
+  --border-hairline: 1px solid var(--color-rule);
+  --border-strong:   2px solid var(--color-accent); /* selected/active underline */
+  --shadow-none: none;
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45); /* floating panels only */
+
+  /* ---- Motion: state-change only (brief §7) ---- */
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-slow: 260ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ---- Layers ---- */
+  --z-sticky: 30;
+  --z-panel:  40;
+  --z-toast:  50;
+}
+
+/* ---- Light theme (opt-in): selected steps, validated on #FBFAF7 ---- */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-bg:            #F4F3EF;
+  --color-surface:       #FBFAF7;
+  --color-surface-raised:#FFFFFF;
+  --color-surface-sunken:#EDEBE4;
+  --color-rule:          #DDD9CF;
+  --color-rule-strong:   #B9B4A8;
+  --color-ink:           #15181B;  /* 17.07:1 */
+  --color-ink-secondary: #4B5257;  /* 7.61:1 */
+  --color-ink-muted:     #6C7378;  /* 4.61:1 — AA */
+  --color-accent:        #B08A2E;  /* amber fill step */
+  --color-accent-ink:    #FBFAF7;
+  --color-accent-dim:    #8A5A00;  /* amber text/links — 5.68:1 */
+  --color-favor:         #007756;
+  --color-favor-text:    #0E7A5F;  /* 5.07:1 */
+  --color-unfavor:       #B93A28;
+  --color-unfavor-text:  #B93A28;  /* 5.44:1 */
+  --color-neutral-mid:   #E4E1D8;
+  --color-focus:         #8A5A00;
+
+  --chart-div-n2: #B93A28;
+  --chart-div-n1: #CE8D80;
+  --chart-div-0:  #E4E1D8;
+  --chart-div-p1: #6FAC97;
+  --chart-div-p2: #007756;
+
+  --chart-seq-1: #C49F4D;
+  --chart-seq-2: #A8842F;
+  --chart-seq-3: #8A6A1E;
+  --chart-seq-4: #6B4E14;
+
+  --shadow-pop: 0 8px 24px rgba(20, 24, 27, 0.18);
+}
+
+/* ---- Reduced motion: everything collapses to state, not transition ---- */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-slow: 0ms;
+  }
 }
