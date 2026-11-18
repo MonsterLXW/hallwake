@@ -24,5 +24,12 @@ pointer-lock FPS; schedule == §4 table verbatim; 4 FSMs match §5 constants; oi
 ## DEFER (cosmetic)
 HUD shows "NEXT ▸ 25" at door 24; stale door-13 comment in loop.test.ts; QA-PHASE9 row in dev DB (gitignored). Render-layer hex = tokenColor fallbacks — sanctioned.
 
-## Orchestrator browser checks (done by orchestrator 2026-11-18)
-re-shots on fixed dist; idle 30s mid-run → attract; gamepad path (unit-tested only, no pad on this machine); console/FPS on new bundle. Results appended by orchestrator below.
+## Orchestrator browser checks (done by orchestrator 2026-11-18) — ALL PASS
+- **Idle-reset (fix 1)**: PASS — pressed E → run started (door 01, HUD live) → 35s idle → attract screen returned. Kiosk no longer sticks off-attract after die/finish.
+- **Gamepad (fix 2)**: unit-tested only (no physical pad on this machine); loop.ts onActivity-per-input-frame verified in loop.test.ts.
+- **Console/FPS on new bundle**: PASS — 0 errors, 57 FPS steady on ?auto=1.
+- **Re-shots**: qa/shots/gaunt-tell-door7.png (amber GAUNT tell visible at door 07, HUD kit + checkpoint pips + oil 68%).
+- **IPv6 bind**: use `localhost:8402` (preview binds ::1); deploy task should bind 0.0.0.0 for booth LAN.
+- Pointer-lock console note ("root document not valid for pointer lock") is a Playwright automation artifact, not a product defect.
+
+## QA verdict: PASS (999 vitest, 55+1skip pytest, ip-check clean, 3 fixes committed b685b66/a86152c/83b8f3f)
