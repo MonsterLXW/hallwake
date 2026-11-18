@@ -6,12 +6,29 @@
 
 import { describe, expect, it } from 'vitest';
 import { createInitialState, stepSim } from '../../core/sim';
-import { createAutopilot, DT, MAX_CATCHUP_STEPS } from '../loop';
+import { createAutopilot, DT, frameHasInput, MAX_CATCHUP_STEPS } from '../loop';
 
 describe('fixed-timestep constants', () => {
   it('dt is 1/60 with a 5-step catch-up cap', () => {
     expect(DT).toBeCloseTo(1 / 60, 10);
     expect(MAX_CATCHUP_STEPS).toBe(5);
+  });
+});
+
+describe('frameHasInput (kiosk idle: gamepad counts as activity)', () => {
+  it('an all-zero frame is idle', () => {
+    expect(frameHasInput({ mx: 0, mz: 0, yawD: 0, interact: false })).toBe(false);
+  });
+  it('any stick, look, or interact input is activity', () => {
+    expect(frameHasInput({ mx: 0.5, mz: 0, yawD: 0, interact: false })).toBe(true); // left stick
+    expect(frameHasInput({ mx: 0, mz: 0, yawD: 0.05, interact: false })).toBe(true); // right stick
+    expect(frameHasInput({ mx: 0, mz: 0, yawD: 0, interact: true })).toBe(true); // A/X
+  });
+  it('the autopilot emits activity frames while it plays (idle timer stays fed)', () => {
+    const ap = createAutopilot();
+    let s = createInitialState(1);
+    s = stepSim(s, ap(s));
+    expect(frameHasInput(ap(s))).toBe(true);
   });
 });
 

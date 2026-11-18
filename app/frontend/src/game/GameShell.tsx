@@ -84,6 +84,7 @@ export default function GameShell() {
         return p === 'attract' || p === 'paused';
       },
       onHud: (h) => useUIStore.getState().setHud(h),
+      onActivity: () => useUIStore.getState().markActivity(),
       onPhase: (p) => {
         const s = useUIStore.getState();
         if (s.phase === 'attract' || s.phase === 'paused') return;

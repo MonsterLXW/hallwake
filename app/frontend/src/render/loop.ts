@@ -48,6 +48,15 @@ export interface LoopDeps {
   onPhase(p: RunPhase): void;
   /** T4: every SimEvent is also streamed to the shell (lore/epitaph hooks). */
   onEvent?(ev: SimEvent): void;
+  /** Kiosk idle: fired once per non-zero input frame — the ONLY activity
+      signal for gamepad-only players (no key/pointer listeners fire). */
+  onActivity?(): void;
+}
+
+// A frame counts as booth activity if it carries any input at all. Pure +
+// exported so the kiosk contract is unit-testable without RAF/WebGL.
+export function frameHasInput(f: Frame): boolean {
+  return f.mx !== 0 || f.mz !== 0 || f.yawD !== 0 || f.interact;
 }
 
 export interface LoopHandle {
@@ -210,6 +219,7 @@ export function startLoop(deps: LoopDeps): LoopHandle {
         const frame = autopilot
           ? autopilot(sim)
           : deps.controller.readFrame(sim.player.yaw);
+        if (frameHasInput(frame)) deps.onActivity?.();
         sim = stepSim(sim, frame);
         if (sim.events.length > 0) {
           for (const e of sim.events) events.push(e);
