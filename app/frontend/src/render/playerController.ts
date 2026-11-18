@@ -26,6 +26,18 @@ export function rotateIntent(fwd: number, str: number, yaw: number): { mx: numbe
   return { mx: s * fwd - c * str, mz: c * fwd + s * str };
 }
 
+// Look mapping (pure, tested). The camera (rotation.y = yaw+PI) has
+// screen-right = (-cos yaw, sin yaw) and d(view)/d(yaw) = -screen-right, so
+// POSITIVE yaw turns the view LEFT: moving right (mouse or stick) must
+// DECREASE yaw. +pitch looks up, and mouse-up/stick-up are negative axes.
+export function mouseLook(movementX: number, movementY: number): { yawD: number; pitchD: number } {
+  return { yawD: -movementX * LOOK_SENS, pitchD: -movementY * LOOK_SENS };
+}
+export function stickLook(ax2: number, ax3: number): { yawD: number; pitchD: number } {
+  const dz = (v: number): number => (Math.abs(v) < DEADZONE ? 0 : v);
+  return { yawD: -dz(ax2) * STICK_LOOK, pitchD: -dz(ax3) * STICK_LOOK };
+}
+
 export class PlayerController {
   private keys = new Set<string>();
   private yawDelta = 0;
@@ -96,9 +108,9 @@ export class PlayerController {
 
   private onMouseMove = (e: MouseEvent): void => {
     if (!this.locked) return;
-    this.yawDelta += e.movementX * LOOK_SENS;
-    // moving the mouse up (movementY < 0) looks up (+pitch); the sim clamps
-    this.pitchDelta -= e.movementY * LOOK_SENS;
+    const l = mouseLook(e.movementX, e.movementY); // signs pinned in mouseLook
+    this.yawDelta += l.yawD;
+    this.pitchDelta += l.pitchD; // the sim clamps pitch
   };
 
   private onLockChange = (): void => {
@@ -120,7 +132,7 @@ export class PlayerController {
       fwd += pad.fwd;
       str += pad.str;
       this.yawDelta += pad.yawD;
-      this.pitchDelta -= pad.pitchD; // stick up (axes[3]<0) looks up
+      this.pitchDelta += pad.pitchD; // stickLook already signs stick-up as +pitch
       if (pad.interact && !this.prevPadInteract) this.interactEdge = true;
       this.prevPadInteract = pad.interact;
     } else {
@@ -152,11 +164,12 @@ export class PlayerController {
     const gp = pads && pads[0];
     if (!gp) return null;
     const dz = (v: number) => (Math.abs(v) < DEADZONE ? 0 : v);
+    const look = stickLook(gp.axes[2] ?? 0, gp.axes[3] ?? 0); // stick right/up = turn right/up
     return {
       fwd: -dz(gp.axes[1] ?? 0),
       str: dz(gp.axes[0] ?? 0),
-      yawD: dz(gp.axes[2] ?? 0) * STICK_LOOK,
-      pitchD: dz(gp.axes[3] ?? 0) * STICK_LOOK,
+      yawD: look.yawD,
+      pitchD: look.pitchD,
       interact: !!(gp.buttons[0]?.pressed || gp.buttons[2]?.pressed), // A / X
     };
   }
