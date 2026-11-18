@@ -19,10 +19,10 @@ import {
   atlasCellUV,
   getAtlas,
   getEmissiveTexture,
-  getLootMarkerTexture,
   getNumeralTexture,
   type AtlasCell,
 } from './textures';
+import { worldItemGeometry, worldItemTriangles } from './itemMeshes';
 import type { Quality } from './quality';
 
 export const ROOM_H = 3;
@@ -64,8 +64,8 @@ export interface RoomPlan {
   doorQuad: QuadSpec;
   fakeDoorQuad: QuadSpec | null;
   closetQuad: QuadSpec | null; // Wave 1: openable closet door panel
-  lootQuad: QuadSpec | null; // Wave 1: loot pile position
-  lootItem: ItemType | null; // item art pass: which icon the pile's crate stamps
+  lootQuad: QuadSpec | null; // Wave 1: loot pile anchor (x/z is the pile spot)
+  lootItem: ItemType | null; // 3D item pass: which silhouette the pile mesh wears
   secretQuad: QuadSpec | null; // Wave 4: the odd sconce marking the hidden alcove
   locked: boolean; // Wave 1: exit door stenciled with a padlock
   drawCalls: number;
@@ -183,12 +183,13 @@ export function roomPlanFor(def: DoorDef): RoomPlan {
       : { x: def.closet.x1 - 0.02, y: 1.1, z: cz, w: def.closet.z1 - def.closet.z0, h: 2.2, rotY: Math.PI / 2 };
     aoDiscs.push({ x: (def.closet.x0 + def.closet.x1) / 2, z: cz, r: 0.9 });
   }
-  // Item art pass: the loot pile is a small nailed-crate marker stamped with
-  // the pile's item icon, at the authored loot anchor. It gets its own
-  // instanced draw — loot rooms never carry a closet or fake door (schedule
-  // invariant), so 6 base + 1 marker stays inside the <=7 per-room cap.
+  // 3D item pass: the loot pile is a real 3D mesh of the item itself at the
+  // authored loot anchor (itemMeshes.ts). The anchor quad survives as the
+  // pile's position record; the mesh replaces the old crate-quad draw —
+  // loot rooms never carry a closet or fake door (schedule invariant), so
+  // 6 base + 1 pile stays inside the <=7 per-room cap.
   const lootQuad: QuadSpec | null = def.loot
-    ? { x: geom.loot.x, y: 0.42, z: geom.loot.z, w: 0.6, h: 0.6, rotY: 0 }
+    ? { x: geom.loot.x, y: 0, z: geom.loot.z, w: 0.6, h: 0.6, rotY: 0 }
     : null;
   // Wave 4: the hidden alcove's marked sconce — same wall-quad mapping as a
   // sconce, riding the same instanced draw (scene.ts paints it cold bone so
@@ -203,7 +204,7 @@ export function roomPlanFor(def: DoorDef): RoomPlan {
     props.length * 12 +
     aoDiscs.length * DISC_SEG +
     sconces.length * 2 +
-    (lootQuad ? 2 : 0) + // loot crate marker (own draw, 2 tris)
+    (lootQuad && def.loot ? worldItemTriangles(def.loot) : 0) + // 3D pile mesh (own draw)
     (secretQuad ? 2 : 0) + // Wave 4: the odd sconce rides the sconce draw — no new draw
     alcoves.length * 2 +
     2 + // door
@@ -219,7 +220,7 @@ export function roomPlanFor(def: DoorDef): RoomPlan {
     1 + // blob-AO instances
     (hasFake ? 1 : 0) +
     (closetQuad ? 1 : 0) + // closet panel (GAUNT doors only: 6 base + 1 = 7)
-    (lootQuad ? 1 : 0); // loot crate (loot doors never carry closet/fake: 6 + 1 = 7)
+    (lootQuad ? 1 : 0); // 3D loot pile (loot doors never carry closet/fake: 6 + 1 = 7)
 
   return {
     door: def.door,
@@ -251,6 +252,7 @@ export interface SharedMaterials {
   alcoveMat: THREE.MeshBasicMaterial;
   aoMat: THREE.MeshBasicMaterial;
   closetMat: THREE.MeshBasicMaterial;
+  pileMat: THREE.MeshLambertMaterial; // 3D item pass: token colors ride vertex colors
 }
 
 export function createSharedMaterials(quality: Quality): SharedMaterials {
@@ -270,6 +272,11 @@ export function createSharedMaterials(quality: Quality): SharedMaterials {
       depthWrite: false,
       side: THREE.DoubleSide,
     }),
+    // Loot piles are solid merged meshes shaded by the lantern + ambient so
+    // they read as 3D; their colors are vertex-baked identity tokens (bone /
+    // warm amber), never a texture fetch. DoubleSide so a thin charm plate
+    // never vanishes when viewed from behind.
+    pileMat: new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }),
   };
 }
 
@@ -316,8 +323,7 @@ export interface RoomMeshes {
   aoInst: THREE.InstancedMesh;
   closetPanel: THREE.InstancedMesh | null; // Wave 1: openable closet door
   closetQuad: QuadSpec | null; // base transform for the panel toggle
-  lootMesh: THREE.Mesh | null; // item art pass: crate marker with the pile's icon
-  lootMat: THREE.MeshBasicMaterial | null; // per-room: texture depends on the item
+  lootMesh: THREE.Mesh | null; // 3D item pass: merged silhouette mesh of the pile's item
   secretIndex: number; // Wave 4: sconceInst index of the hidden-alcove sconce, -1 if none
 }
 
@@ -444,23 +450,18 @@ export function buildRoomGroup(plan: RoomPlan, quality: Quality, mats: SharedMat
     group.add(closetPanel);
   }
 
-  // --- Loot crate marker (item art pass): a small upright crate stamped
-  // with the pile's item icon — the pile reads as loot from across the room
-  // and as *which* loot up close. Its own draw (loot rooms carry no closet
-  // or fake door, so 6 base + 1 stays within the per-room cap). The scene
-  // hides it once the pile is taken. ---
+  // --- Loot pile (3D item pass): a real chunky mesh of the item itself —
+  // key / bottle / flask / charm silhouettes that read from any angle at
+  // booth distance. ONE merged BufferGeometry per pile (itemMeshes.ts), so
+  // it costs exactly the draw the old stamped quad used: loot rooms stay
+  // 6 base + 1 pile = 7. Built centred on the origin with its base at y=0,
+  // so the scene spins it about its own centre and hover-bobs it from the
+  // floor. The scene hides it once the pile is taken. ---
   let lootMesh: THREE.Mesh | null = null;
-  let lootMat: THREE.MeshBasicMaterial | null = null;
   if (plan.lootQuad && plan.lootItem) {
     const q = plan.lootQuad;
-    lootMat = new THREE.MeshBasicMaterial({
-      map: getLootMarkerTexture(plan.lootItem),
-      transparent: true,
-      side: THREE.DoubleSide,
-    });
-    lootMesh = new THREE.Mesh(new THREE.PlaneGeometry(q.w, q.h), lootMat);
-    lootMesh.position.set(q.x, q.y, q.z);
-    lootMesh.rotation.y = q.rotY;
+    lootMesh = new THREE.Mesh(worldItemGeometry(plan.lootItem), mats.pileMat);
+    lootMesh.position.set(q.x, 0, q.z);
     group.add(lootMesh);
   }
 
@@ -478,7 +479,7 @@ export function buildRoomGroup(plan: RoomPlan, quality: Quality, mats: SharedMat
   aoInst.instanceMatrix.needsUpdate = true;
   group.add(aoInst);
 
-  return { group, doorMat, fakeDoorMesh, sconceInst, aoInst, closetPanel, closetQuad: plan.closetQuad, lootMesh, lootMat, secretIndex };
+  return { group, doorMat, fakeDoorMesh, sconceInst, aoInst, closetPanel, closetQuad: plan.closetQuad, lootMesh, secretIndex };
 }
 
 export function disposeRoomGroup(room: RoomMeshes): void {
@@ -486,6 +487,5 @@ export function disposeRoomGroup(room: RoomMeshes): void {
     if (obj instanceof THREE.Mesh || obj instanceof THREE.InstancedMesh) obj.geometry.dispose();
   });
   room.doorMat.dispose();
-  if (room.lootMat) room.lootMat.dispose();
   room.group.clear();
 }

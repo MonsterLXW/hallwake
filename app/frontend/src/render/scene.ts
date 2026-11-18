@@ -202,11 +202,23 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
         const lit = sim.sconces[i];
         room.sconceInst.setColorAt(i, lit ? (cinderLive ? cinderColor : litColor) : offColor);
       }
-      // Item art pass: the loot crate marker (stamped with the pile's item
-      // icon) stands while the pile is there, gone once taken.
+      // 3D item pass: the loot pile is a real merged silhouette mesh — it
+      // stands while the pile is there, gone once taken. A slow constant
+      // spin + hover bob (pure time math, never RNG) sells the third
+      // dimension from any angle; reduced motion parks it upright.
       if (room.lootMesh) {
         const def = doorDef(sim.door);
-        room.lootMesh.visible = !!def.loot && !sim.lootTaken;
+        const show = !!def.loot && !sim.lootTaken;
+        room.lootMesh.visible = show;
+        if (show) {
+          if (reducedMotion) {
+            room.lootMesh.rotation.y = 0;
+            room.lootMesh.position.y = 0.03;
+          } else {
+            room.lootMesh.rotation.y = nowSec * 0.9;
+            room.lootMesh.position.y = 0.03 + Math.sin(nowSec * 1.7) * 0.025;
+          }
+        }
       }
       // Wave 4: the hidden alcove's sconce — a cold bone flame among the warm
       // ones while the nook is unopened; dark once the porter found it.
@@ -279,4 +291,5 @@ function staticDispose(mats: SharedMaterials): void {
   mats.alcoveMat.dispose();
   mats.closetMat.dispose();
   mats.aoMat.dispose();
+  mats.pileMat.dispose();
 }

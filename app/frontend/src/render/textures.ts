@@ -354,9 +354,12 @@ export function getEmissiveTexture(kind: EmissiveKind): THREE.Texture {
 // The user complaint this answers: "I can't tell a key from a bottle." Every
 // kit item gets ONE unmistakable silhouette, drawn from a 16x16 stencil map
 // at 4x scale (64px): '#' is bone, every other cell stays transparent. Pure
-// integer math — no Math.random, no fetch — and cached per kind. The same
-// stencils feed the 3D loot marker (nailed crate + stamped icon), so the
-// pile in the world and the slot in the kit bar speak the same picture.
+// integer math — no Math.random, no fetch — and cached per kind. The HUD kit
+// bar and shop stay 2D stencil icons; the world pile is now a real 3D mesh
+// (itemMeshes.ts) built from the same silhouette language, so the pile in
+// the world and the slot in the kit bar speak the same picture. The crate-
+// stamp composite below stays as the cached stencil frame art (test-covered);
+// the world no longer stamps it.
 // Bone only: items are information, never a signal hue (brief §3).
 
 export type ItemIconKind = 'PICK' | 'TONIC' | 'FLASK' | 'WARD' | 'COIN';

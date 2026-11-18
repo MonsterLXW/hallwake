@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { SCHEDULE, doorDef } from '../../core/schedule';
 import { BUDGET, ENTITY_DRAW_RESERVE, scenePlanFromRoom, withinBudget } from '../budget';
 import { roomPlanFor } from '../roomBuilder';
+import { worldItemTriangles } from '../itemMeshes';
 import type { Quality } from '../quality';
 
 const QUALITIES: Quality[] = ['low', 'mid', 'high'];
@@ -71,10 +72,11 @@ describe('per-room structure', () => {
     expect(a.doorQuad).toEqual(b.doorQuad);
   });
 
-  it('loot crate markers ride their own draw; every room still <= 7', () => {
-    // Item art pass: the loot pile is a textured crate marker with its own
-    // draw. Loot doors never carry a closet or fake door (schedule table),
-    // so 6 base + 1 marker stays inside the per-room cap.
+  it('loot pile meshes ride their own draw; every room still <= 7', () => {
+    // 3D item pass: the loot pile is a real merged silhouette mesh with its
+    // own draw (it replaced the stamped crate quad — same slot, same count).
+    // Loot doors never carry a closet or fake door (schedule table), so
+    // 6 base + 1 pile stays inside the per-room cap.
     let lootPlans = 0;
     for (const def of SCHEDULE) {
       for (const variant of ['A', 'B'] as const) {
@@ -83,13 +85,29 @@ describe('per-room structure', () => {
         if (def.loot) {
           lootPlans++;
           expect(plan.lootItem).toBe(def.loot);
-          expect(plan.drawCalls).toBe(7); // 6 base + the crate marker
+          expect(plan.drawCalls).toBe(7); // 6 base + the 3D pile mesh
         } else {
           expect(plan.lootItem).toBeNull();
         }
       }
     }
     expect(lootPlans).toBe(16); // doors 2,4,6,8,11,14,17,23 x both variants
+  });
+
+  it('the 3D pile mesh replaces the crate-quad draw and budgets its triangles', () => {
+    // The mesh must REPLACE the quad's draw, not add one: a loot door with
+    // the pile costs exactly one more draw than the same door without loot,
+    // and the plan's triangle count carries the real merged-mesh count.
+    for (const def of SCHEDULE) {
+      if (!def.loot) continue;
+      for (const variant of ['A', 'B'] as const) {
+        const withPile = roomPlanFor({ ...def, variant });
+        const without = roomPlanFor({ ...def, variant, loot: undefined });
+        expect(withPile.drawCalls).toBeLessThanOrEqual(7);
+        expect(withPile.drawCalls - without.drawCalls).toBe(1);
+        expect(withPile.triangles - without.triangles).toBe(worldItemTriangles(def.loot));
+      }
+    }
   });
 
   it('door 24 (finale) preloads no next room', () => {
