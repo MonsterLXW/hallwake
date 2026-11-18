@@ -63,6 +63,10 @@ const INITIAL_HUD: HudSnapshot = {
   deaths: 0,
   runMs: 0,
   deepest: 1,
+  inv: [],
+  coins: 0,
+  locked: false,
+  hidden: false,
 };
 
 export const useUIStore = create<UIState>((set, get) => ({

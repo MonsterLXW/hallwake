@@ -65,11 +65,11 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(cBg, preset.fogDensity);
 
-  // Ambient fill: a dim bone wash so walls/props read faintly outside the
-  // lantern cone. Without it MeshLambert surfaces outside the spot are pure
-  // black and the corridor is unnavigable. Kept low to preserve the horror
-  // mood — the lantern still carves the focal pool of light.
-  const ambient = new THREE.AmbientLight(cBone, 0.26);
+  // Ambient fill: a bone wash so walls/props read clearly outside the
+  // lantern cone — the near room and its exits must be plainly navigable
+  // (the corridor's far end stays dark via fog, not via black walls). The
+  // lantern still carves the focal pool of light and owns the tells.
+  const ambient = new THREE.AmbientLight(cBone, 0.6);
   scene.add(ambient);
 
   const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 32);
@@ -121,6 +121,8 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
   const dimColor = new THREE.Color();
   const cinderColor = new THREE.Color(cCinder);
   const offColor = new THREE.Color(0x050507);
+  const lootColor = new THREE.Color(tokenColor('--color-accent', '#E3D7BC')); // bone = information
+  const scratchDummy = new THREE.Object3D();
 
   let bobPhase = 0;
   let lastNow = 0;
@@ -188,10 +190,30 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
       litColor.set(cinderLive ? cCinder : cWarm);
       dimColor.set(cBone).multiplyScalar(0.5);
       for (let i = 0; i < room.sconceInst.count; i++) {
+        if (i === room.lootIndex) continue; // loot glint has its own state
         const lit = sim.sconces[i];
         room.sconceInst.setColorAt(i, lit ? (cinderLive ? cinderColor : litColor) : offColor);
       }
+      // Wave 1: loot glint — bone while the pile is there, dark once taken.
+      if (room.lootIndex >= 0) {
+        const def = doorDef(sim.door);
+        const avail = !!def.loot && !sim.lootTaken;
+        room.sconceInst.setColorAt(room.lootIndex, avail ? lootColor : offColor);
+      }
       if (room.sconceInst.instanceColor) room.sconceInst.instanceColor.needsUpdate = true;
+
+      // Wave 1: closet panel — sealed across the nook while hidden (the
+      // narrow slit is the view), stowed to nothing while open.
+      if (room.closetPanel && room.closetQuad) {
+        const q = room.closetQuad;
+        const k = sim.hidden ? 1 : 0.001;
+        scratchDummy.position.set(q.x, q.y, q.z);
+        scratchDummy.rotation.set(0, q.rotY, 0);
+        scratchDummy.scale.set(q.w * k, q.h * k, 1);
+        scratchDummy.updateMatrix();
+        room.closetPanel.setMatrixAt(0, scratchDummy.matrix);
+        room.closetPanel.instanceMatrix.needsUpdate = true;
+      }
 
       // --- door numeral tint + TALLY fake door ------------------------------
       const tally = sim.entities.find((e) => e.kind === 'TALLY');
@@ -240,5 +262,6 @@ function staticDispose(mats: SharedMaterials): void {
   mats.propsMat.dispose();
   mats.sconceMat.dispose();
   mats.alcoveMat.dispose();
+  mats.closetMat.dispose();
   mats.aoMat.dispose();
 }

@@ -22,7 +22,10 @@ import {
 } from '../cues';
 import { createAudioGraph } from '../graph';
 
-const EVENT_TYPES: EventType[] = ['tell', 'death', 'door_open', 'banish', 'checkpoint', 'finale'];
+const EVENT_TYPES: EventType[] = [
+  'tell', 'death', 'door_open', 'banish', 'checkpoint', 'finale',
+  'loot', 'coin', 'item_use', 'lock', 'hide',
+];
 const ENTITY_KINDS: EntityKind[] = ['GAUNT', 'MURMUR', 'TALLY', 'CINDER'];
 const BUSES: BusName[] = ['ambience', 'door', 'gaunt', 'murmur', 'tally', 'cinder'];
 const OSC_KINDS: OscKind[] = ['sine', 'square', 'sawtooth', 'triangle', 'noise'];

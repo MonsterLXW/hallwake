@@ -34,9 +34,10 @@ export class PlayerController {
   private yawDelta = 0;
   private pitch = 0; // view-only vertical look; never enters the sim (movement stays axis-aligned)
   private interactEdge = false;
+  private useEdge = -1; // Wave 1: inventory slot 0..3 pressed since last frame
   private prevPadInteract = false;
   private locked = false;
-  private frame: Frame = { mx: 0, mz: 0, yawD: 0, interact: false };
+  private frame: Frame = { mx: 0, mz: 0, yawD: 0, interact: false, use: -1 };
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -85,6 +86,9 @@ export class PlayerController {
   private onKeyDown = (e: KeyboardEvent): void => {
     this.keys.add(e.code);
     if (e.code === 'KeyE' && !e.repeat) this.interactEdge = true;
+    // Wave 1: number keys 1..4 use the kit slot (only FLASK is drinkable;
+    // the sim ignores the rest).
+    if (!e.repeat && e.code >= 'Digit1' && e.code <= 'Digit4') this.useEdge = e.code.charCodeAt(5) - 49;
   };
 
   private onKeyUp = (e: KeyboardEvent): void => {
@@ -136,6 +140,8 @@ export class PlayerController {
     this.yawDelta = 0;
     f.interact = this.interactEdge;
     this.interactEdge = false;
+    f.use = this.useEdge;
+    this.useEdge = -1;
     return f;
   }
 

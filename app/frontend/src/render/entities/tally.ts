@@ -64,7 +64,8 @@ export function buildTally(fakeNum: number): EntityVisual<TallyState> {
       lastPhase = state.phase;
     }
 
-    if (state.phase === 'IDLE') {
+    if (state.phase === 'IDLE' || state.phase === 'BANISHED') {
+      // BANISHED is the WARD terminal: the marks and the mouth are gone.
       chalk.visible = false;
       glow.visible = false;
       fakeDoor.visible = false;

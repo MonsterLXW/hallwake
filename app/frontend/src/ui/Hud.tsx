@@ -1,15 +1,52 @@
 // HALLWAKE — the diegetic kit HUD (design-brief §6). This is the night
 // porter's working kit: a stenciled door numeral, a ruled door log (the
 // TALLY counterplay surface — always on, never animated), a brass oil tube,
-// tell glyphs in entity signal colors, and a mono interact prompt. Plates
-// + hairlines, radius 0, no blur, no glow. Every value reads uiStore only;
-// the sim is never touched from here.
+// tell glyphs in entity signal colors, the Wave 1 kit strip (four slots,
+// key numbers, bone glyphs — items are information, never signal hues), the
+// coin purse line, and a mono interact prompt. Plates + hairlines, radius 0,
+// no blur, no glow. Every value reads uiStore only; the sim is never touched
+// from here.
 
 import { useUIStore } from '../state/uiStore';
 import { CHECKPOINT_DOORS } from '../core/schedule';
-import type { EntityKind } from '../core/types';
+import type { EntityKind, ItemType } from '../core/types';
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
+
+// Wave 1 kit glyphs: stroked bone marks, each a distinct silhouette so the
+// slot reads at a glance (and never relies on color alone).
+function ItemGlyph({ item }: { item: ItemType }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="var(--color-ink)"
+      strokeWidth="1.8"
+      aria-hidden="true"
+      style={{ display: 'block', width: '22px', height: '22px' }}
+    >
+      {item === 'WARD' && (
+        <g>
+          <path d="M12 2 20 6v7c0 5-4 8-8 9-4-1-8-4-8-9V6Z" />
+          <path d="M12 8v8M8 12h8" />
+        </g>
+      )}
+      {item === 'TONIC' && (
+        <g>
+          <path d="M10 2h4M11 2v5l-3 4v9a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-9l-3-4V2" />
+          <path d="M8 14h8" />
+        </g>
+      )}
+      {item === 'PICK' && <path d="M4 20 16 8a4 4 0 0 1 4-4M16 8l3 3M4 20l4-1" />}
+      {item === 'FLASK' && (
+        <g>
+          <path d="M9 3h6M11 3v4L6 17a2 2 0 0 0 2 3h8a2 2 0 0 0 2-3L13 7V3" />
+          <path d="M8 15h8" />
+        </g>
+      )}
+    </svg>
+  );
+}
 
 // Tell glyphs (brief §6): GAUNT = tall slit, MURMUR = hollow ring,
 // TALLY = four-stroke tally, CINDER = flame outline. Color is never the
@@ -142,6 +179,26 @@ export default function Hud() {
             />
           ))}
         </div>
+        {/* Wave 1: the coin purse, ruled under the log */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 'var(--space-3)',
+            marginTop: 'var(--space-2)',
+            borderTop: 'var(--border-hairline)',
+            paddingTop: 'var(--space-2)',
+            fontSize: 'var(--text-2xs)',
+            letterSpacing: 'var(--tracking-label)',
+            textTransform: 'uppercase',
+            color: 'var(--color-ink-muted)',
+          }}
+        >
+          <span>Purse</span>
+          <span style={{ color: 'var(--color-ink)' }} aria-label={`${hud.coins} coins`}>
+            {hud.coins}
+          </span>
+        </div>
       </div>
 
       {/* --- oil gauge: bottom-left vertical tube --- */}
@@ -266,6 +323,81 @@ export default function Hud() {
           [E] {hud.interactPrompt}
         </div>
       )}
+
+      {/* Wave 1: hidden state — the closet slit is the whole world now */}
+      {hud.hidden && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: 'calc(50% - var(--space-7))',
+            transform: 'translateX(-50%)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--text-2xs)',
+            letterSpacing: 'var(--tracking-label)',
+            textTransform: 'uppercase',
+            color: 'var(--color-ink-secondary)',
+            background: 'var(--color-plate-alpha)',
+            border: 'var(--border-plate)',
+            padding: 'var(--space-1) var(--space-3)',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Hidden — [E] to step out
+        </div>
+      )}
+
+      {/* Wave 1: kit strip — four ruled slots, key numbers, bone glyphs */}
+      <div
+        role="status"
+        aria-label={`kit: ${hud.inv.length ? hud.inv.join(', ') : 'empty'}`}
+        style={{
+          position: 'absolute',
+          left: '50%',
+          bottom: 'var(--hud-safe)',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          background: 'var(--color-plate-alpha)',
+          border: 'var(--border-plate)',
+        }}
+      >
+        {[0, 1, 2, 3].map((slot) => {
+          const item = hud.inv[slot];
+          return (
+            <div
+              key={slot}
+              style={{
+                width: 'var(--hud-row-h)',
+                height: 'var(--hud-row-h)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                borderRight: slot < 3 ? 'var(--border-hairline)' : 'none',
+                opacity: item ? 1 : 0.35,
+              }}
+            >
+              {item ? <ItemGlyph item={item} /> : <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-2xs)', color: 'var(--color-ink-muted)' }}>·</span>}
+              <span
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  top: '2px',
+                  left: '4px',
+                  fontFamily: 'var(--font-mono)',
+                  fontVariantNumeric: 'tabular-nums',
+                  fontSize: 'var(--text-2xs)',
+                  color: 'var(--color-ink-muted)',
+                }}
+              >
+                {slot + 1}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -2,17 +2,27 @@
 
 export type EntityKind = 'GAUNT' | 'MURMUR' | 'TALLY' | 'CINDER';
 
+// Wave 1 kit items (features.md): WARD banishes the killing entity, TONIC
+// survives one hit, PICK opens a locked exit door, FLASK is +0.5 oil on use.
+export type ItemType = 'WARD' | 'TONIC' | 'PICK' | 'FLASK';
+
 export type EventType =
   | 'tell'
   | 'death'
   | 'door_open'
   | 'banish'
   | 'checkpoint'
-  | 'finale';
+  | 'finale'
+  | 'loot' // picked up an item
+  | 'coin' // collected coins
+  | 'item_use' // consumed an item (item field says which)
+  | 'lock' // locked exit opened with a PICK
+  | 'hide'; // entered/exited a closet
 
 export interface SimEvent {
   type: EventType;
   entity?: EntityKind;
+  item?: ItemType;
   door: number;
   visible: boolean; // false when oil <= 0.20 (tell FX suppressed)
 }
@@ -22,6 +32,7 @@ export interface Frame {
   mz: number;
   yawD: number; // yaw delta applied this tick, radians
   interact: boolean;
+  use?: number; // inventory slot 0..3 actively used this tick (number keys)
 }
 
 export interface EntitySnapshot {
@@ -40,7 +51,7 @@ export interface GauntState extends EntitySnapshot {
 
 export interface MurmurState extends EntitySnapshot {
   kind: 'MURMUR';
-  phase: 'HUNT' | 'FROZEN';
+  phase: 'HUNT' | 'FROZEN' | 'BANISHED';
   x: number;
   z: number;
   dist: number;
@@ -48,7 +59,7 @@ export interface MurmurState extends EntitySnapshot {
 
 export interface TallyState extends EntitySnapshot {
   kind: 'TALLY';
-  phase: 'IDLE' | 'TELL' | 'FAKE';
+  phase: 'IDLE' | 'TELL' | 'FAKE' | 'BANISHED';
 }
 
 export interface CinderState extends EntitySnapshot {
@@ -85,4 +96,11 @@ export interface SimState {
   deepest: number; // deepest door reached this run
   finished: boolean; // finale survived
   oilCanUsed: boolean;
+  // --- Wave 1: kit, loot, coins, closets, death-saves (features.md) ---
+  inv: ItemType[]; // carried kit, cap INV_CAP (4)
+  coins: number; // run currency, collected from authored coin piles
+  hidden: boolean; // inside a closet: movement locked, GAUNT sweep cannot reach
+  lootTaken: boolean; // this room's authored loot pile already picked up
+  coinsTaken: boolean; // this room's authored coin pile already collected
+  invuln: number; // ticks of TONIC grace remaining (death checks skipped)
 }

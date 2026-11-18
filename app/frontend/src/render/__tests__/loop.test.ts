@@ -5,7 +5,7 @@
 // orchestrator measures.
 
 import { describe, expect, it } from 'vitest';
-import { createInitialState, stepSim } from '../../core/sim';
+import { createInitialState, makeRoomState, stepSim } from '../../core/sim';
 import { createAutopilot, DT, frameHasInput, MAX_CATCHUP_STEPS } from '../loop';
 
 describe('fixed-timestep constants', () => {
@@ -60,5 +60,13 @@ describe('autopilot dev entry (plays doors with the sim)', () => {
     // by T1, not a renderer/autopilot bug.
     expect(s.deepest).toBeGreaterThanOrEqual(12);
     expect(s.tick).toBeGreaterThan(0);
+  });
+
+  it('clears the Wave 1 locked door 4 by grabbing the authored PICK first', () => {
+    const ap = createAutopilot();
+    let s = makeRoomState(4, 1); // locked exit, PICK loot in-room
+    for (let i = 0; i < 3000 && s.door === 4 && s.alive; i++) s = stepSim(s, ap(s));
+    expect(s.door).toBe(5);
+    expect(s.inv.includes('PICK')).toBe(false); // the PICK was spent on the lock
   });
 });

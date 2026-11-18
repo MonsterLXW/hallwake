@@ -79,7 +79,15 @@ export interface StepResult<T> {
   died?: boolean;
 }
 
-export function stepGaunt(g: GauntState, roomTick: number, player: PlayerState, def: DoorDef, oil: number, door: number): StepResult<GauntState> {
+export function stepGaunt(
+  g: GauntState,
+  roomTick: number,
+  player: PlayerState,
+  def: DoorDef,
+  oil: number,
+  door: number,
+  hidden = false,
+): StepResult<GauntState> {
   const events: SimEvent[] = [];
   let next = g;
   const tellTick = def.gaunt!.tellTick;
@@ -101,14 +109,16 @@ export function stepGaunt(g: GauntState, roomTick: number, player: PlayerState, 
     if (roomTick < sweepStart + GAUNT_SWEEP_TICKS) {
       const alcove = archetypeGeom(def.archetype).alcoves[def.gaunt!.alcoveIndex];
       const speed = Math.hypot(player.vel.x, player.vel.z);
-      const hidden =
+      const inAlcove =
         player.x >= alcove.x0 && player.x <= alcove.x1 &&
         player.z >= alcove.z0 && player.z <= alcove.z1 &&
         speed < GAUNT_STILL_SPEED;
-      if (!hidden) next = { ...next, hiddenOk: false };
+      // Wave 1: a closed closet door is a wall — hidden is always safe, and
+      // it never latches hiddenOk false even if you were caught moving first.
+      if (!hidden && !inAlcove) next = { ...next, hiddenOk: false };
     } else {
       // resolve at the end of the sweep duration
-      if (next.hiddenOk) {
+      if (next.hiddenOk || hidden) {
         next = { ...next, phase: 'SURVIVED' };
       } else {
         return { e: next, events, died: true };
@@ -121,6 +131,8 @@ export function stepGaunt(g: GauntState, roomTick: number, player: PlayerState, 
 export function stepMurmur(m: MurmurState, roomTick: number, player: PlayerState, oil: number, door: number): StepResult<MurmurState> {
   const events: SimEvent[] = [];
   let next = m;
+
+  if (m.phase === 'BANISHED') return { e: next, events }; // WARD terminal
 
   if (roomTick === MURMUR_TELL_TICK) {
     events.push({ type: 'tell', entity: 'MURMUR', door, visible: oil > OIL_CRITICAL });
@@ -148,6 +160,7 @@ export function stepMurmur(m: MurmurState, roomTick: number, player: PlayerState
 export function stepTally(t: TallyState, roomTick: number, oil: number, door: number): StepResult<TallyState> {
   const events: SimEvent[] = [];
   let next = t;
+  if (t.phase === 'BANISHED') return { e: next, events }; // WARD terminal
   if (t.phase === 'IDLE' && roomTick === TALLY_TELL_TICK) {
     next = { ...t, phase: 'TELL' };
     events.push({ type: 'tell', entity: 'TALLY', door, visible: oil > OIL_CRITICAL });

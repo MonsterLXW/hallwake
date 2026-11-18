@@ -2,6 +2,7 @@
 // This table IS the product thesis: identical every run, no RNG.
 
 import { describe, it, expect } from 'vitest';
+import type { AABB } from '../schedule';
 import {
   SCHEDULE,
   CHECKPOINT_DOORS,
@@ -13,7 +14,7 @@ import {
   archetypeGeom,
   doorDef,
 } from '../schedule';
-import { GAUNT_TELL_LEAD } from '../entities';
+import { GAUNT_TELL_LEAD, GAUNT_SWEEP_TICKS } from '../entities';
 import { WALK_SPEED } from '../sim';
 
 describe('24-door schedule table', () => {
@@ -149,5 +150,72 @@ describe('24-door schedule table', () => {
     expect(ROOM_W).toBe(14);
     expect(ROOM_D).toBe(10);
     expect(archetypeGeom('boiler').alcoves).toEqual(archetypeGeom('guest').alcoves);
+  });
+});
+
+describe('Wave 1 authored extras (loot, coins, locks, closets)', () => {
+  it('locked exits are exactly doors {4,14}, each with a PICK authored in the same room', () => {
+    const locked = SCHEDULE.filter((d) => d.locked).map((d) => d.door);
+    expect(locked).toEqual([4, 14]);
+    for (const door of locked) {
+      expect(doorDef(door).loot, `door ${door} must author the PICK in-room`).toBe('PICK');
+    }
+  });
+
+  it('loot piles match the authored table and never sit on a GAUNT/CINDER/FINALE door', () => {
+    const expectLoot: Record<number, string> = {
+      2: 'TONIC', 4: 'PICK', 6: 'FLASK', 8: 'WARD', 11: 'TONIC',
+      14: 'PICK', 17: 'FLASK', 23: 'WARD',
+    };
+    for (const d of SCHEDULE) {
+      expect(d.loot ?? null, `door ${d.door}`).toBe(expectLoot[d.door] ?? null);
+      if (d.loot) expect([7, 9, 13, 15, 19, 21, 24], `door ${d.door} event`).not.toContain(d.door);
+    }
+  });
+
+  it('coin piles match the authored table', () => {
+    const expectCoins: Record<number, number> = { 2: 3, 3: 2, 6: 4, 8: 3, 11: 2, 17: 5, 20: 3, 23: 4 };
+    for (const d of SCHEDULE) {
+      expect(d.coins ?? null, `door ${d.door}`).toBe(expectCoins[d.door] ?? null);
+    }
+  });
+
+  it('closets sit on exactly the GAUNT doors {7,13,19}, inside the room, clear of alcoves and colliders', () => {
+    const withCloset = SCHEDULE.filter((d) => d.closet).map((d) => d.door);
+    expect(withCloset).toEqual([7, 13, 19]);
+    for (const door of withCloset) {
+      const def = doorDef(door);
+      const c = def.closet!;
+      expect(c.x0).toBeGreaterThanOrEqual(0);
+      expect(c.x1).toBeLessThanOrEqual(ROOM_W);
+      expect(c.z0).toBeGreaterThanOrEqual(0);
+      expect(c.z1).toBeLessThanOrEqual(ROOM_D);
+      const geom = archetypeGeom(def.archetype);
+      const overlaps = (a: AABB, b: AABB) => a.x0 < b.x1 && b.x0 < a.x1 && a.z0 < b.z1 && b.z0 < a.z1;
+      for (const al of geom.alcoves) {
+        expect(overlaps(c, al), `door ${door} closet vs alcove`).toBe(false);
+      }
+      for (const col of geom.colliders) {
+        expect(overlaps(c, col), `door ${door} closet vs collider`).toBe(false);
+      }
+      // reachable: the hide must be enterable before the sweep resolves
+      const sweepResolve = def.gaunt!.tellTick + GAUNT_TELL_LEAD + GAUNT_SWEEP_TICKS;
+      const maxTravel = (WALK_SPEED * sweepResolve) / 60;
+      const dist = Math.hypot((c.x0 + c.x1) / 2 - ENTRY.x, (c.z0 + c.z1) / 2 - ENTRY.z);
+      expect(dist, `door ${door} closet reach`).toBeLessThanOrEqual(maxTravel);
+    }
+  });
+
+  it('every archetype has loot + coin anchors, clear of its colliders', () => {
+    const inside = (p: { x: number; z: number }, b: AABB) => p.x > b.x0 && p.x < b.x1 && p.z > b.z0 && p.z < b.z1;
+    for (const a of ['junction', 'guest', 'laundry', 'lounge', 'boiler', 'washroom'] as const) {
+      const g = archetypeGeom(a);
+      expect(g.loot, `${a} loot`).toBeTruthy();
+      expect(g.coins, `${a} coins`).toBeTruthy();
+      for (const c of g.colliders) {
+        expect(inside(g.loot, c), `${a} loot in collider`).toBe(false);
+        expect(inside(g.coins, c), `${a} coins in collider`).toBe(false);
+      }
+    }
   });
 });

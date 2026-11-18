@@ -104,6 +104,45 @@ export const EVENT_CUES: Record<EventType, CueRecipe> = {
       { osc: 'sine', freqFrom: 659, freqTo: 659, dur: 1.0, attack: 0.05, gain: 0.16 },
     ],
   },
+  // --- Wave 1 kit/loot events (features.md) ---
+  loot: {
+    bus: 'door',
+    layers: [
+      // kit into the satchel: short leather-and-clasp thud
+      { osc: 'noise', freqFrom: 0, freqTo: 0, dur: 0.12, attack: 0.004, gain: 0.2, filter: { type: 'lowpass', from: 900, to: 300, q: 1 } },
+      { osc: 'sine', freqFrom: 196, freqTo: 147, dur: 0.18, attack: 0.01, gain: 0.14 },
+    ],
+  },
+  coin: {
+    bus: 'door',
+    layers: [
+      // two bright metal ticks, the purse sound
+      { osc: 'sine', freqFrom: 1319, freqTo: 1319, dur: 0.09, attack: 0.003, gain: 0.16 },
+      { osc: 'sine', freqFrom: 1760, freqTo: 1760, dur: 0.12, attack: 0.004, gain: 0.12 },
+    ],
+  },
+  item_use: {
+    bus: 'ambience',
+    layers: [
+      // the kit doing its work: a soft drawn breath
+      { osc: 'noise', freqFrom: 0, freqTo: 0, dur: 0.4, attack: 0.08, gain: 0.14, filter: { type: 'bandpass', from: 400, to: 900, q: 1.5 } },
+    ],
+  },
+  lock: {
+    bus: 'door',
+    layers: [
+      // the PICK turning: a metallic clack then the tumbler giving
+      { osc: 'square', freqFrom: 220, freqTo: 180, dur: 0.08, attack: 0.002, gain: 0.16, filter: { type: 'lowpass', from: 2400, to: 900, q: 1 } },
+      { osc: 'noise', freqFrom: 0, freqTo: 0, dur: 0.25, attack: 0.01, gain: 0.22, filter: { type: 'lowpass', from: 1200, to: 200, q: 1 } },
+    ],
+  },
+  hide: {
+    bus: 'ambience',
+    layers: [
+      // the closet panel swinging shut / open: cloth-and-wood
+      { osc: 'noise', freqFrom: 0, freqTo: 0, dur: 0.3, attack: 0.02, gain: 0.16, filter: { type: 'lowpass', from: 700, to: 250, q: 1.2 } },
+    ],
+  },
 };
 
 // Per-entity tell voices — each tell is learnable by ear (brief §7: audio

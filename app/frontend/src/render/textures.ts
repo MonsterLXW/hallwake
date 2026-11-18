@@ -24,6 +24,13 @@ export interface PaintCtx {
   font: string;
   textAlign: string;
   textBaseline: string;
+  // stroke path (padlock stencil on locked door numerals) — the headless
+  // test stub answers any method call, so these stay cheap
+  strokeStyle: string;
+  lineWidth: number;
+  beginPath(): void;
+  arc(x: number, y: number, r: number, a0: number, a1: number): void;
+  stroke(): void;
 }
 
 type RGB = [number, number, number];
@@ -75,8 +82,11 @@ function getPalette(): Palette {
     bone,
     boneDim,
     boneFaint,
-    plaster: mix(bg, boneFaint, 0.34), // lantern-lit plaster reads dim bone-grey
-    wood: mix(bg, boneDim, 0.22),
+    // Visibility pass: the near room and its exits must read plainly outside
+    // the lantern cone, so the base surfaces sit higher on the bone ramp.
+    // The far end of the corridor stays dark via fog, not via black paint.
+    plaster: mix(bg, boneDim, 0.5), // lantern-lit plaster reads mid bone-grey
+    wood: mix(bg, boneDim, 0.35),
     warm: mix(bone, [255, 214, 150], 0.25),
   };
   return palette;
@@ -102,9 +112,12 @@ function createCanvas(px: number): { getContext(kind: '2d'): PaintCtx } {
 
 // ---- quadrant paints -----------------------------------------------------
 // lightmap gradient: bright band at lantern height, baked into walls too.
+// The floor of the gradient is deliberately high (0.45): the near room must
+// read plainly outside the lantern cone (the corridor's far end stays dark
+// via fog, not via black walls).
 function lightGradient(v: number): number {
   const d = v - 0.55;
-  return 0.28 + 0.72 * Math.exp(-(d * d) / 0.05);
+  return 0.45 + 0.55 * Math.exp(-(d * d) / 0.05);
 }
 
 function paintPlaster(ctx: PaintCtx, px: number, ox: number, oy: number): void {
@@ -225,8 +238,10 @@ export function atlasCellUV(cell: AtlasCell, quality: Quality): { u0: number; v0
 const NUMERAL_PX = 256;
 
 // Stenciled door numeral — painted-door presence (brief §4 signage voice).
-export function getNumeralTexture(n: number): THREE.Texture {
-  const key = `numeral@${n}`;
+// locked=true stencils a small padlock under the numeral: the exit needs a
+// PICK (Wave 1), and the tell must read without any color (bone only).
+export function getNumeralTexture(n: number, locked = false): THREE.Texture {
+  const key = `numeral@${n}${locked ? '@lock' : ''}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const p = getPalette();
@@ -239,17 +254,30 @@ export function getNumeralTexture(n: number): THREE.Texture {
   ctx.fillRect(18, 20, NUMERAL_PX - 36, 3);
   ctx.fillRect(18, NUMERAL_PX - 24, NUMERAL_PX - 36, 3);
   ctx.fillStyle = `rgb(${p.bone[0] | 0},${p.bone[1] | 0},${p.bone[2] | 0})`;
-  ctx.font = `900 ${NUMERAL_PX * 0.62}px "Big Shoulders Display", "Arial Narrow", sans-serif`;
+  ctx.font = `900 ${NUMERAL_PX * (locked ? 0.52 : 0.62)}px "Big Shoulders Display", "Arial Narrow", sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(String(n), NUMERAL_PX / 2, NUMERAL_PX * 0.52);
+  ctx.fillText(String(n), NUMERAL_PX / 2, NUMERAL_PX * (locked ? 0.42 : 0.52));
+  if (locked) {
+    // padlock stencil: shackle arc + body, bone strokes
+    const cx = NUMERAL_PX / 2;
+    const by = NUMERAL_PX * 0.72;
+    ctx.strokeStyle = `rgb(${p.bone[0] | 0},${p.bone[1] | 0},${p.bone[2] | 0})`;
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.arc(cx, by, 22, Math.PI, 0);
+    ctx.stroke();
+    ctx.fillRect(cx - 32, by, 64, 44);
+    ctx.fillStyle = `rgb(${p.bg[0] | 0},${p.bg[1] | 0},${p.bg[2] | 0})`;
+    ctx.fillRect(cx - 4, by + 14, 8, 18);
+  }
   const tex = new THREE.CanvasTexture(canvas as unknown as HTMLCanvasElement);
   tex.colorSpace = THREE.SRGBColorSpace;
   cache.set(key, tex);
   return tex;
 }
 
-export type EmissiveKind = 'sconce' | 'alcove' | 'ao';
+export type EmissiveKind = 'sconce' | 'alcove' | 'ao' | 'closet';
 const EMISSIVE_PX = 128;
 
 export function getEmissiveTexture(kind: EmissiveKind): THREE.Texture {
@@ -280,6 +308,17 @@ export function getEmissiveTexture(kind: EmissiveKind): THREE.Texture {
         img.data[i + 1] = p.boneDim[1] * v;
         img.data[i + 2] = p.boneDim[2] * v;
         img.data[i + 3] = 255;
+      } else if (kind === 'closet') {
+        // Wave 1 closet panel: painted plank face with a narrow vertical
+        // sight slit down the middle — the hidden view is the slit.
+        const plank = 0.55 + 0.25 * hash(x >> 3, y >> 4, 13);
+        const slit = Math.abs(x - EMISSIVE_PX / 2) <= 2 ? 1 : 0;
+        const v = slit ? 1 : plank;
+        const c = slit ? p.warm : p.boneDim;
+        img.data[i] = c[0] * v;
+        img.data[i + 1] = c[1] * v;
+        img.data[i + 2] = c[2] * v;
+        img.data[i + 3] = 255;
       } else {
         // blob AO disc: black with radial alpha falloff
         const a = Math.max(0, 1 - r2 / 0.25);
@@ -301,7 +340,7 @@ export function getEmissiveTexture(kind: EmissiveKind): THREE.Texture {
 export function textureBytesFor(quality: Quality, roomsAlive: number): number {
   const q = QUALITY[quality];
   const atlas = (q.wallPx * 2) ** 2 * 4;
-  const emissive = 3 * EMISSIVE_PX * EMISSIVE_PX * 4;
+  const emissive = 4 * EMISSIVE_PX * EMISSIVE_PX * 4;
   const numerals = roomsAlive * NUMERAL_PX * NUMERAL_PX * 4;
   return atlas + emissive + numerals;
 }
@@ -315,6 +354,7 @@ export const TEXTURE_KEYS = [
   'emissive@sconce',
   'emissive@alcove',
   'emissive@ao',
+  'emissive@closet',
 ] as const;
 
 export function textureCacheSize(): number {

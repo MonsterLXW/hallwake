@@ -61,6 +61,9 @@ export interface RoomPlan {
   alcoveQuads: QuadSpec[];
   doorQuad: QuadSpec;
   fakeDoorQuad: QuadSpec | null;
+  closetQuad: QuadSpec | null; // Wave 1: openable closet door panel
+  lootQuad: QuadSpec | null; // Wave 1: loot glint (rides the sconce instance draw)
+  locked: boolean; // Wave 1: exit door stenciled with a padlock
   drawCalls: number;
   triangles: number;
 }
@@ -162,24 +165,43 @@ export function roomPlanFor(def: DoorDef): RoomPlan {
   const sconces = sconceQuadsFor(def);
   const alcoves = alcoveQuadsFor(def.archetype);
 
+  // Wave 1: closet door panel on the room-facing side of the authored rect,
+  // plus a blob-AO disc marking the nook on the floor.
+  let closetQuad: QuadSpec | null = null;
+  if (def.closet) {
+    const cz = (def.closet.z0 + def.closet.z1) / 2;
+    const east = (def.closet.x0 + def.closet.x1) / 2 >= 7;
+    closetQuad = east
+      ? { x: def.closet.x0 + 0.02, y: 1.1, z: cz, w: def.closet.z1 - def.closet.z0, h: 2.2, rotY: -Math.PI / 2 }
+      : { x: def.closet.x1 - 0.02, y: 1.1, z: cz, w: def.closet.z1 - def.closet.z0, h: 2.2, rotY: Math.PI / 2 };
+    aoDiscs.push({ x: (def.closet.x0 + def.closet.x1) / 2, z: cz, r: 0.9 });
+  }
+  // Wave 1: loot glint — a small emissive quad at the authored loot anchor.
+  const lootQuad: QuadSpec | null = def.loot
+    ? { x: geom.loot.x, y: 0.55, z: geom.loot.z, w: 0.45, h: 0.45, rotY: 0 }
+    : null;
+
   const triangles =
     wall.length * 12 + // walls
     2 * 2 + // floor + ceiling quads
     props.length * 12 +
     aoDiscs.length * DISC_SEG +
     sconces.length * 2 +
+    (lootQuad ? 2 : 0) + // loot glint rides the sconce instance draw
     alcoves.length * 2 +
     2 + // door
-    (hasFake ? 2 : 0);
+    (hasFake ? 2 : 0) +
+    (closetQuad ? 2 : 0);
 
   const drawCalls =
     1 + // StaticMerged
     1 + // PropsMerged
     1 + // DoorMesh
-    1 + // sconce instances
+    1 + // sconce instances (+ loot glint instance, same draw)
     1 + // alcove instances
     1 + // blob-AO instances
-    (hasFake ? 1 : 0);
+    (hasFake ? 1 : 0) +
+    (closetQuad ? 1 : 0); // closet panel (GAUNT doors only: 6 base + 1 = 7)
 
   return {
     door: def.door,
@@ -192,6 +214,9 @@ export function roomPlanFor(def: DoorDef): RoomPlan {
     alcoveQuads: alcoves,
     doorQuad: { x: 7, y: 1.05, z: 9.78, w: DOOR_GAP, h: 2.1, rotY: Math.PI },
     fakeDoorQuad: hasFake ? { x: FAKE_DOOR_POS.x, y: 1.05, z: 9.72, w: DOOR_GAP, h: 2.1, rotY: Math.PI } : null,
+    closetQuad,
+    lootQuad,
+    locked: def.locked === true,
     drawCalls,
     triangles,
   };
@@ -205,6 +230,7 @@ export interface SharedMaterials {
   sconceMat: THREE.MeshBasicMaterial;
   alcoveMat: THREE.MeshBasicMaterial;
   aoMat: THREE.MeshBasicMaterial;
+  closetMat: THREE.MeshBasicMaterial;
 }
 
 export function createSharedMaterials(quality: Quality): SharedMaterials {
@@ -217,6 +243,7 @@ export function createSharedMaterials(quality: Quality): SharedMaterials {
     // boxes and stay FrontSide).
     sconceMat: new THREE.MeshBasicMaterial({ map: getEmissiveTexture('sconce'), side: THREE.DoubleSide }),
     alcoveMat: new THREE.MeshBasicMaterial({ map: getEmissiveTexture('alcove'), side: THREE.DoubleSide }),
+    closetMat: new THREE.MeshBasicMaterial({ map: getEmissiveTexture('closet'), side: THREE.DoubleSide }),
     aoMat: new THREE.MeshBasicMaterial({
       map: getEmissiveTexture('ao'),
       transparent: true,
@@ -239,13 +266,15 @@ function retileUV(geo: THREE.BufferGeometry, cell: AtlasCell, quality: Quality):
 
 // "baked look" vertex trick: darken geometry near floor and ceiling so rooms
 // read as pre-lit even before the lantern touches them (architecture §3).
+// The floor of the ramp is high (0.8): the near room and its exits must read
+// plainly outside the lantern cone; the far end stays dark via fog instead.
 function shadeByHeight(geo: THREE.BufferGeometry): void {
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
   const colors = new Float32Array(pos.count * 3);
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i);
     const t = Math.min(1, Math.max(0, y / ROOM_H));
-    const s = 0.66 + 0.34 * Math.sin(Math.PI * Math.min(1, t * 1.15));
+    const s = 0.8 + 0.2 * Math.sin(Math.PI * Math.min(1, t * 1.15));
     colors[i * 3] = s;
     colors[i * 3 + 1] = s;
     colors[i * 3 + 2] = s;
@@ -265,6 +294,9 @@ export interface RoomMeshes {
   fakeDoorMesh: THREE.Mesh | null;
   sconceInst: THREE.InstancedMesh;
   aoInst: THREE.InstancedMesh;
+  closetPanel: THREE.InstancedMesh | null; // Wave 1: openable closet door
+  closetQuad: QuadSpec | null; // base transform for the panel toggle
+  lootIndex: number; // sconceInst instance index of the loot glint, -1 if none
 }
 
 const dummy = new THREE.Object3D();
@@ -306,8 +338,12 @@ export function buildRoomGroup(plan: RoomPlan, quality: Quality, mats: SharedMat
   for (const g of propGeos) g.dispose();
   group.add(new THREE.Mesh(propsMerged, mats.propsMat));
 
-  // --- DoorMesh (stenciled numeral, always legible: unlit basic material) ---
-  const doorMat = new THREE.MeshBasicMaterial({ map: getNumeralTexture(plan.door), side: THREE.DoubleSide });
+  // --- DoorMesh (stenciled numeral, always legible: unlit basic material;
+  // Wave 1: locked exits carry a padlock stencil under the numeral) ---
+  const doorMat = new THREE.MeshBasicMaterial({
+    map: getNumeralTexture(plan.door, plan.locked),
+    side: THREE.DoubleSide,
+  });
   const dq = plan.doorQuad;
   const doorMesh = new THREE.Mesh(new THREE.PlaneGeometry(dq.w, dq.h), doorMat);
   doorMesh.position.set(dq.x, dq.y, dq.z);
@@ -325,11 +361,13 @@ export function buildRoomGroup(plan: RoomPlan, quality: Quality, mats: SharedMat
     group.add(fakeDoorMesh);
   }
 
-  // --- Sconces: instanced emissive quads (not lights — budget §3) ---
+  // --- Sconces: instanced emissive quads (not lights — budget §3). Wave 1:
+  // the loot glint rides this same instanced draw as one extra instance. ---
+  const lootIndex = plan.lootQuad ? plan.sconceQuads.length : -1;
   const sconceInst = new THREE.InstancedMesh(
     new THREE.PlaneGeometry(1, 1),
     mats.sconceMat,
-    plan.sconceQuads.length,
+    plan.sconceQuads.length + (lootIndex >= 0 ? 1 : 0),
   );
   plan.sconceQuads.forEach((q, i) => {
     dummy.position.set(q.x, q.y, q.z);
@@ -339,6 +377,15 @@ export function buildRoomGroup(plan: RoomPlan, quality: Quality, mats: SharedMat
     sconceInst.setMatrixAt(i, dummy.matrix);
     sconceInst.setColorAt(i, new THREE.Color(1, 1, 1));
   });
+  if (plan.lootQuad) {
+    const q = plan.lootQuad;
+    dummy.position.set(q.x, q.y, q.z);
+    dummy.rotation.set(0, q.rotY, 0);
+    dummy.scale.set(q.w, q.h, 1);
+    dummy.updateMatrix();
+    sconceInst.setMatrixAt(lootIndex, dummy.matrix);
+    sconceInst.setColorAt(lootIndex, new THREE.Color(1, 1, 1));
+  }
   sconceInst.instanceMatrix.needsUpdate = true;
   if (sconceInst.instanceColor) sconceInst.instanceColor.needsUpdate = true;
   group.add(sconceInst);
@@ -359,6 +406,22 @@ export function buildRoomGroup(plan: RoomPlan, quality: Quality, mats: SharedMat
   alcoveInst.instanceMatrix.needsUpdate = true;
   group.add(alcoveInst);
 
+  // --- Closet panel (Wave 1): one instanced plank with a sight slit. The
+  // scene toggles its scale: stowed when open, sealed across the nook when
+  // the player hides inside. ---
+  let closetPanel: THREE.InstancedMesh | null = null;
+  if (plan.closetQuad) {
+    const q = plan.closetQuad;
+    closetPanel = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), mats.closetMat, 1);
+    dummy.position.set(q.x, q.y, q.z);
+    dummy.rotation.set(0, q.rotY, 0);
+    dummy.scale.set(q.w, q.h, 1);
+    dummy.updateMatrix();
+    closetPanel.setMatrixAt(0, dummy.matrix);
+    closetPanel.instanceMatrix.needsUpdate = true;
+    group.add(closetPanel);
+  }
+
   // --- BlobAO: instanced dark discs under props (the "baked" contact) ---
   const aoGeo = new THREE.CircleGeometry(1, DISC_SEG);
   aoGeo.rotateX(-Math.PI / 2);
@@ -373,7 +436,7 @@ export function buildRoomGroup(plan: RoomPlan, quality: Quality, mats: SharedMat
   aoInst.instanceMatrix.needsUpdate = true;
   group.add(aoInst);
 
-  return { group, doorMat, fakeDoorMesh, sconceInst, aoInst };
+  return { group, doorMat, fakeDoorMesh, sconceInst, aoInst, closetPanel, closetQuad: plan.closetQuad, lootIndex };
 }
 
 export function disposeRoomGroup(room: RoomMeshes): void {

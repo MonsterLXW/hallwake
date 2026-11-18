@@ -65,6 +65,10 @@ export function buildMurmur(): EntityVisual<MurmurState> {
   group.add(swarm, face, hazeL, hazeR);
 
   function update(state: MurmurState, t: number, ctx: EntityCtx = DEFAULT_CTX): void {
+    if (state.phase === 'BANISHED') {
+      group.visible = false; // WARD terminal: the swarm is gone
+      return;
+    }
     group.visible = true;
 
     const frozen = state.phase === 'FROZEN';

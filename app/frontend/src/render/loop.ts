@@ -14,7 +14,7 @@ import {
   sconcePositions,
 } from '../core/schedule';
 import type { Archetype } from '../core/schedule';
-import type { EntityKind, Frame, SimEvent, SimState } from '../core/types';
+import type { EntityKind, Frame, ItemType, SimEvent, SimState } from '../core/types';
 import type { SceneBundle } from './scene';
 import type { PlayerController } from './playerController';
 import { mountEntities } from './entities/fx';
@@ -34,6 +34,11 @@ export interface HudSnapshot {
   deaths: number;
   runMs: number;
   deepest: number;
+  // Wave 1 kit surface (features.md): inventory strip, purse, lock/hidden state
+  inv: ItemType[];
+  coins: number;
+  locked: boolean; // current exit is locked and the kit has no PICK
+  hidden: boolean; // inside a closet
 }
 
 export type RunPhase = 'playing' | 'dead' | 'run';
@@ -56,7 +61,7 @@ export interface LoopDeps {
 // A frame counts as booth activity if it carries any input at all. Pure +
 // exported so the kiosk contract is unit-testable without RAF/WebGL.
 export function frameHasInput(f: Frame): boolean {
-  return f.mx !== 0 || f.mz !== 0 || f.yawD !== 0 || f.interact;
+  return f.mx !== 0 || f.mz !== 0 || f.yawD !== 0 || f.interact || (f.use !== undefined && f.use >= 0);
 }
 
 export interface LoopHandle {
@@ -72,14 +77,29 @@ export interface LoopHandle {
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
 // The interact prompt is derived from sim state only (the HUD never guesses):
-// exit door in range -> OPEN nn, blackout sconce in range -> RELIGHT,
-// unused oil can in range -> OIL CAN.
+// exit door in range -> OPEN nn (or the LOCKED tell), closet -> HIDE /
+// EXIT CLOSET, loot pile -> TAKE <item>, coin pile -> COINS, blackout sconce
+// in range -> RELIGHT, unused oil can in range -> OIL CAN, FLASK in kit with
+// nothing else in range -> FLASK +OIL.
 function promptFor(sim: SimState): string | null {
   if (!sim.alive || sim.finished) return null;
   const def = doorDef(sim.door);
   const p = sim.player;
   if (sim.door < 24 && Math.hypot(p.x - EXIT_DOOR.x, p.z - EXIT_DOOR.z) <= INTERACT_RANGE) {
+    if (def.locked && !sim.inv.includes('PICK')) return 'LOCKED — need a Pick';
     return `OPEN ${pad2(sim.doorLog)}`;
+  }
+  if (sim.hidden) return 'EXIT CLOSET';
+  const geom = archetypeGeom(def.archetype);
+  if (def.loot && !sim.lootTaken && Math.hypot(p.x - geom.loot.x, p.z - geom.loot.z) <= INTERACT_RANGE) {
+    return sim.inv.length < 4 ? `TAKE ${def.loot}` : 'PACK FULL';
+  }
+  if (def.coins && !sim.coinsTaken && Math.hypot(p.x - geom.coins.x, p.z - geom.coins.z) <= INTERACT_RANGE) {
+    return 'COINS';
+  }
+  if (def.closet) {
+    const cc = { x: (def.closet.x0 + def.closet.x1) / 2, z: (def.closet.z0 + def.closet.z1) / 2 };
+    if (Math.hypot(p.x - cc.x, p.z - cc.z) <= INTERACT_RANGE) return 'HIDE';
   }
   const cinder = sim.entities.find((e) => e.kind === 'CINDER');
   if (cinder && cinder.phase === 'BLACKOUT' && def.cinderOrder) {
@@ -88,9 +108,10 @@ function promptFor(sim: SimState): string | null {
     }
   }
   if (!sim.oilCanUsed) {
-    const can = archetypeGeom(def.archetype).oilCan;
+    const can = geom.oilCan;
     if (Math.hypot(p.x - can.x, p.z - can.z) <= INTERACT_RANGE) return 'OIL CAN';
   }
+  if (sim.inv.includes('FLASK')) return 'FLASK +OIL';
   return null;
 }
 
@@ -137,6 +158,13 @@ export function createAutopilot(): (s: SimState) => Frame {
       tx = (al.x0 + al.x1) / 2;
       tz = (al.z0 + al.z1) / 2;
       if (p.x >= al.x0 && p.x <= al.x1 && p.z >= al.z0 && p.z <= al.z1) standStill = true;
+    } else if (def.locked && !s.inv.includes('PICK') && def.loot === 'PICK' && !s.lootTaken) {
+      // Wave 1: a locked exit with the PICK authored in this room — a porter
+      // who knows the schedule grabs the pick before ever touching the door.
+      const lt = archetypeGeom(def.archetype).loot;
+      tx = lt.x;
+      tz = lt.z;
+      if (Math.hypot(p.x - lt.x, p.z - lt.z) < 1.1) want = true;
     } else if (cinder && cinder.phase === 'BLACKOUT' && def.cinderOrder) {
       const sc = sconcePositions(def)[def.cinderOrder[cinder.progress]];
       tx = sc.x;
@@ -266,6 +294,10 @@ export function startLoop(deps: LoopDeps): LoopHandle {
         deaths: sim.deaths,
         runMs: sim.runMs,
         deepest: sim.deepest,
+        inv: [...sim.inv],
+        coins: sim.coins,
+        locked: doorDef(sim.door).locked === true && !sim.inv.includes('PICK'),
+        hidden: sim.hidden,
       });
     }
     deps.onPhase(sim.finished ? 'run' : sim.alive ? 'playing' : 'dead');
