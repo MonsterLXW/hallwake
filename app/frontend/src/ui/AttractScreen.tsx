@@ -91,7 +91,8 @@ export default function AttractScreen({ onBegin }: { onBegin(): void }) {
             textAlign: 'right',
           }}
         >
-          24 doors · one lantern · learn the schedule or be learned by it
+          24 doors · one lantern · learn the schedule or be learned by it · build{' '}
+          {typeof __HW_BUILD__ === 'undefined' ? 'dev' : __HW_BUILD__}
         </p>
       </header>
 
