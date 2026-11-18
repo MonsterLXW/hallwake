@@ -4,6 +4,7 @@
   "source": "Operator directive 2026-11-18: start fresh; Phase 1 discovered the target competition",
   "created": "2026-11-18",
   "ports": { "backend": 8401, "frontend": 8402 },
+  "venv": "app/backend/.venv/Scripts/python.exe",
   "llm": {
     "url": "http://100.124.134.63:8890/v1",
     "model": "qwen3.8-flash-next",
@@ -11,18 +12,20 @@
     "note": "NEVER suggest a paid API. trycloudflare llama.cpp fallback in research/brief.md is ephemeral — demo evidence = video + repo."
   },
   "constraint": "ONE agent at a time — never dispatch parallel agents (operator directive 2026-11-18)",
+  "operator_directive": "2026-11-18 OVERRIDE: project = first-person horror-corridor game LIKE THE ROBLOX GAME DOORS. Category 3 (Cloud9 booth mini game). Original IP only — no DOORS/Roblox names or assets anywhere.",
   "infra_lessons_carried": [
     "hf-* UI agents must NOT open Playwright MCP mid-task (context overflow) — browser verification is centralized by the orchestrator at gates",
-    "verify every agent's artifacts on disk with Read/Glob before marking a phase done"
+    "verify every agent's artifacts on disk with Read/Glob before marking a phase done",
+    "index.html title HALLWAKE assigned inside T2; vite proxy fix to 8401 inside T4"
   ],
   "phases": {
     "1": { "status": "done", "note": "Cloud9 x JetBrains Sky's The Limit, deadline Jan 12 2027, 245 entrants, 5x0.2 rubric after pass/fail theme+tool gate", "artifacts": ["research/brief.json", "research/brief.md", "research/notes.md"] },
-    "2": { "status": "done", "note": "GO; recommended category 1 VALORANT tactical scouting; risks: GRID spike, demo-URL vs local LLM (app works LLM-down), Stage One kill-list (.idea evidence, no Riot art, LICENSE, fresh repo, register for JetBrains codes)", "artifacts": ["research/opportunity.md"] },
-    "3": { "status": "done", "note": "16 ideas verified; top: ReadTheRound 80, LineupLab 76, GCRadar 76, CompIQ 74, PatchDelta 72", "artifacts": ["research/ideas.json", "research/ideas.md"] },
-    "4": { "status": "done", "note": "winner GCRadar+CompIQ graft, expected 80 (raw 84); runner-up LineupLab 74; kill-risks: thin GC seed data, matrix subjectivity, scope creep (5-screen cap, analyzer never cut)", "artifacts": ["plan/idea.md"] },
-    "5": { "status": "done", "note": "7 tasks / 4 waves, acyclic verified by orchestrator; stack FastAPI+stdlib sqlite3 / Vite+React+TS, hand-rolled SVG charts, no realtime; riskiest T3 analyzer (hand-computed golden fixtures first)", "artifacts": ["plan/architecture.md", "plan/architecture.mmd", "plan/tasks.json", "plan/roadmap.md"] },
-    "6": { "status": "running", "note": "orchestrator scaffolding; hf-design to follow", "artifacts": [] },
-    "7": { "status": "pending", "note": "", "artifacts": [] },
+    "2": { "status": "done", "note": "GO; Cat 1 recommendation superseded by operator directive (Cat 3 booth mini game, DOORS-like)", "artifacts": ["research/opportunity.md"] },
+    "3": { "status": "done", "note": "16 ideas verified; esports concepts superseded by operator directive", "artifacts": ["research/ideas.json", "research/ideas.md"] },
+    "4": { "status": "done", "note": "HALLWAKE — learnable horror, no unreadable RNG; GAUNT/MURMUR/TALLY/CINDER, 24 doors fixed schedule, lantern oil, checkpoints /4, expected 80/100", "artifacts": ["plan/idea.md"] },
+    "5": { "status": "done", "note": "rewritten for HALLWAKE: 7 tasks / 3 waves (W1 T1/T5/T6/T7, W2 T2, W3 T3/T4), acyclic machine-verified; riskiest T2 renderer+perf gate (60fps iGPU, week-2); sim renderer-independent", "artifacts": ["plan/architecture.md", "plan/architecture.mmd", "plan/tasks.json", "plan/roadmap.md"] },
+    "6": { "status": "running", "note": "hf-design redo dispatched: horror identity replaces scouting-desk (tokens.css + design-brief.md overwrite); scaffold+deps stay", "artifacts": [] },
+    "7": { "status": "pending", "note": "T1 (VALORANT seed) aborted, wrote nothing", "artifacts": [] },
     "8": { "status": "pending", "note": "", "artifacts": [] },
     "9": { "status": "pending", "note": "", "artifacts": [] },
     "10": { "status": "pending", "note": "", "artifacts": [] },
@@ -30,5 +33,5 @@
     "12": { "status": "pending", "note": "", "artifacts": [] }
   },
   "current_phase": 6,
-  "selected_idea": "GCRadar — Game Changers Scouting Hub & Composition Analyzer (Cat 1; GCRadar shell + CompIQ draft-analyzer graft; deterministic core, local-LLM narration only; 5-screen cap)"
+  "selected_idea": "HALLWAKE — DOORS-like first-person horror (Cat 3 booth mini game; 24 doors, 4 original entities with deterministic telegraphed behaviors, lantern oil, checkpoints; LLM flavor-only behind firewall, 100% playable LLM-down; procedural canvas art + WebAudio synth; original IP)"
 }

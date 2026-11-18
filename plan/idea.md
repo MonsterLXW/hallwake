@@ -1,169 +1,209 @@
-# Winning idea — binding contract (Phase 4, 2026-11-18)
+# Winning idea — binding contract (Phase 4 REWRITE, 2026-11-18)
 
-## GCRadar — Game Changers Scouting Hub & Composition Analyzer
+Operator-fixed concept: first-person horror-corridor mini game in the spirit of the Roblox
+genre of numbered-door corridor horror (numbered doors one by one, lurking entities, light
+mechanics). This document does NOT re-litigate the concept — it scopes it into a winning,
+buildable Category 3 entry. Original IP only: zero DOORS/Roblox names, assets, or entity
+names anywhere in repo, UI, or video.
 
-**Category:** 1 — VALORANT / Game Changers tactical scouting, utility placement & operator profiler.
-**Thesis:** the Game Changers scene has near-zero public scouting tooling, so build the GC-first
-scouting hub: curated team dossiers + a deterministic composition/matchup engine that scores a
-draft *against the agent pool of the team you'll actually face* — not a generic tier list.
-**Origin:** merged entry — GCRadar (gc-radar, raw 76) shell + CompIQ (comp-iq, raw 74)
-composition/matrix module, per the ideas.json graft note. The merge fixes GCRadar's two
-weaknesses (tech 6, thin-data dashboard) without touching its 9/9 Impact+Idea axis.
-**Final expected score: 80/100** (adversarial, risk-adjusted; raw merged 84). Runner-up:
-LineupLab at 74.
+## 0. Title (original IP)
 
-## 1. What it is — full concept
+**PICK: HALLWAKE** — coined compound (hall + wake: the corridor you walk, the vigil you keep,
+the trail an entity leaves). Zero trademark collisions known, un-Googleable = un-collidable.
+Backups, in order: **LANTERN ROW**, **DOORWAKE**, **THRESHOLD NIGHT**. Never use "DOORS",
+"Roblox", "LSPLASH", "Rococo", or any DOORS entity name (Rush, Screech, Figure, Halt, Glitch,
+Jeff, Dupe, Eyes, Amity, Blink, Stonk…) in repo, code, comments, UI, or video script.
 
-A web app (FastAPI + SQLite backend, Vite/React + TS frontend) for GC team staff, amateur
-VALORANT players, and analysts:
+## 1. Thesis
 
-1. **Team dossiers (GC-first):** every curated GC team gets a page — roster, agent pools with
-   per-agent comfort tiers, recent form, event tags. This is the "operator profiler" half of
-   the category, pointed at the underserved audience the sponsor itself champions.
-2. **Matchup prep:** pick team A vs team B → computed agent-pool overlap, ban-pressure view
-   (which agents hurt most if banned/taken), role-coverage gaps, head-to-head matrix summary.
-3. **Composition analyzer (tech core, from CompIQ):** a VALORANT pick/ban state machine
-   (VCT-style flow, factual rules only) that scores compositions live using a curated
-   agent×agent synergy/counter matrix and agent×map matrix — role coverage, synergy graph,
-   matchup-adjusted ranking with per-edge confidence and reason chains.
-4. **LLM coach layer (local vLLM only):** dossier narratives, "what to watch for" bullets,
-   draft rationale prose, Q&A over pre-computed stats. Never computes anything.
+**Learnable horror, not luck.** Every scare is scripted to a fixed door number and telegraphed
+with a readable tell — no RNG the player can't read. The corridor is the same every run;
+survival is knowledge, and the booth leaderboard rewards knowledge (deepest door + time), not
+dice. This is simultaneously the design manifesto (Quality of Idea), the demo-video spine
+(Presentation), and the booth-fit answer (Impact): a 3–5 minute kiosk loop with checkpoints and
+a leaderboard that a passerby can learn, die to, retry, and beat.
 
-**The one ambitious differentiator:** draft *against a scouted opponent*. The analyzer's
-counter-pick ranking is conditioned on the opponent team's actual agent pool from the curated
-store — "ban X because Cloud9 GC runs it 70% on Ascent and it counters your comp 2:1."
-Nobody in this contest will build matchup-conditioned composition scoring, and nobody will
-build it for GC specifically.
+**The one ambitious differentiator:** the numbered door itself is an entity (**TALLY**) — the
+doors are not just level structure, they are part of the bestiary. Nobody else in this contest
+will build a horror mini game at all; nobody will make the door numbers diegetic.
 
-## 2. Feature split
+## 2. Core loop (booth session, 3–5 min)
 
-**MUST (deterministic core — the product must fully work with the LLM down):**
-- SQLite curated store: 10–12 GC teams, ~80 players, agent pools with comfort tiers, results,
-  event tags. Hand-curated seed dataset (week 1 task, capped — depth over breadth).
-- Static agent/map content cached from valorant-api.com (factual text only; NO Riot art,
-  no hotlinked assets anywhere in UI or video; original iconography only).
-- Team dossier pages with charts (original design system).
-- Matchup prep view (overlap, ban pressure, role coverage — all computed).
-- Composition analyzer: draft state machine + synergy/counter matrix scoring + ranked
-  counter-picks with reasons and per-edge confidence.
-- LLM-offline state: every AI feature shows a clear "model offline" placeholder; zero
-  deterministic feature degrades.
-- JetBrains evidence: build in PyCharm + WebStorm (or IntelliJ IDEA), DataGrip on the SQLite
-  layer, Junie agent sessions on the matrix module; commit `.idea/` + `.junie/` folders.
+Attract screen (idle kiosk) → press any key → spawn at Door 1 → walk room-to-room, open each
+numbered door to advance → each event room plays a scripted encounter (read tell → counterplay)
+→ safe rooms between: refill lantern oil, read a lore card → die → 1.5 s death card (LLM epitaph
+or canned line) → instant respawn at last checkpoint → reach Door 24 (finale combo) → run card
+(deepest door, time, deaths) → name entry on local leaderboard → attract screen after 30 s idle.
 
-**SHOULD (score lifters, cut in emergency):**
-- LLM coach layer: narratives, bullets, draft rationale, JSON-forced Q&A over computed stats.
-- "Scouted pattern" archetype tags on compositions (dive/poke/setup) with provenance notes —
-  keeps the "tactical scouting" theme explicit.
-- Form/trend charts over the curated results.
-- GRID ingestion adapter behind a feature flag — an upgrade, never a dependency.
-- Adjustable matrix weights UI ("explain this score" transparency panel).
+## 3. Structure — sized for solo scope
 
-**CUT (do not build — scope fence):**
-- User accounts/auth, live match ingestion, account linking, mobile app, VOD/video analysis,
-  economy simulator (BuyMath), scenario trainer (ReadTheRound), lineup drills (LineupLab —
-  possible v2 module, not v1), multiplayer, anything networked beyond the app itself.
+- **One floor, 24 doors.** Not 30: 24 = 6 checkpoint blocks of 4, fits 3–5 min, fits a solo
+  artist's month.
+- **6 room archetypes × 2 greybox variants** (corridor junction, guest room, laundry/storage,
+  lounge, boiler room, washroom). Rooms are re-skinned/rearranged between doors — the number
+  and small prop seeds change, geometry is reused.
+- **Fixed event schedule** (same every run — this is the manifesto):
+  - TALLY at doors 5, 12, 18 · GAUNT at 7, 13, 19 · CINDER at 9, 15, 21 · MURMUR at 10, 16, 22
+  - Door 24 finale: CINDER blackout + GAUNT chase in one room.
+  - All other doors: safe rooms with oil refills, lore cards, optional chalk hints.
+- **Checkpoints at doors 1, 5, 9, 13, 17, 21.** Death never sends a booth player to the start.
 
-## 3. Deterministic core vs local-LLM firewall
+## 4. Entity roster — 4 originals, deterministic, telegraphed
 
-- **Deterministic code owns (exact, testable):** all stat computation, matrix math, draft
-  legality and state machine, rankings, charts, data ingestion/caching. Every number on every
-  screen comes from this layer.
-- **Local LLM owns (never correctness):** prose narration of computed facts — dossier blurbs,
-  scouting bullets, draft rationale, Q&A. Input is the deterministic layer's JSON; output is
-  forced JSON; prompts kept small for qwen3.8-flash-next.
-- **Hard rule:** the LLM never generates a number presented as a stat. One hallucinated stat
-  in front of esports-org judges discredits the entry.
-- **Demo safety:** judges can't reach the vLLM host; the deployed demo URL runs the full
-  deterministic product with LLM features in offline state. Video + repo run instructions are
-  primary evidence.
+Each entity: **tell** (audio + visual, always fires before the mechanic), **mechanic**,
+**counterplay**. Behavior is scripted per door index; a player who saw it once can beat it
+every time. No unreadable RNG anywhere.
 
-## 4. Data strategy (no official APIs, GRID optional)
+1. **GAUNT** — tall stitched-silhouette that walks straight through the room.
+   Tell: every light in the room flickers twice, then burns amber; a door slams behind you.
+   Mechanic: 6-second window; GAUNT sweeps the room along a fixed path.
+   Counterplay: step into a lit alcove/wardrobe nook (marked with pale paint) and stay still
+   until the amber fades. Wrong nook or moving = death.
+2. **MURMUR** — a face-in-the-wall / moth-swarm that only moves in darkness.
+   Tell: whispering that grows louder when you face its direction; your lantern beam sputters
+   when it is in your cone.
+   Mechanic: each second it is outside your light cone it advances one step toward you.
+   Counterplay: keep the lantern beam on it and back toward the exit door; oil management IS
+   the counterplay. Beam on it = frozen.
+3. **TALLY** — the door-number trickster; it edits the doors.
+   Tell: fresh chalk tally marks on the doorframe; the door number glows red for one beat.
+   Mechanic: TALLY adds a duplicate fake door in the room — opening it is death (it is a mouth).
+   Counterplay: the HUD door log shows the next expected number; the real door's number matches
+   the log, the fake never does. Reading the numbers IS the game.
+4. **CINDER** — a wandering flame-wraith that eats light.
+   Tell: all flames in the room turn blue; a rising hiss; lantern oil drains 4× faster.
+   Mechanic: room lights go out one by one; your lantern radius shrinks toward zero (total
+   darkness = GAUNT spawns early).
+   Counterplay: relight the wall sconces in the order of the scratch marks beside them
+   (deterministic order shown in-room) to banish CINDER and restore oil.
 
-- GC team/roster/results facts: hand-curated seed set (public knowledge, entered by hand —
-  no scraping, no third-party IP in the repo). Cap: 10–12 teams, fields deep enough to feel
-  alive. This is a weekend task scheduled in week 1, not a background risk.
-- Agent/map static content: valorant-api.com (community static content API, factual text,
-  cached locally at build time).
-- Synergy/counter + agent×map matrices: curated from community knowledge, each edge carries
-  confidence + source note.
-- GRID official esports data: 2h spike decides. If access lands, adapter enriches dossiers/
-  form. If not, nothing changes — the analyzer and hub never need it. The merged entry is
-  GRID-immune at its core (better than raw GCRadar on this axis).
-- Riot IP posture: factual names only; no Riot/Data Dragon art in UI, repo, or video; no team
-  logos (trademarks) — text/initials instead; original abstract iconography throughout.
+## 5. Light / safety mechanic
 
-## 5. Demo video story (<3 min, YouTube public)
+Lantern oil is the single resource: scalar 0–1, full tank ≈ 90 s of light; radius scales with
+oil; sconces and Cinders' aftermath refill it. Light gates everything: tells are only visible
+above 20% oil; MURMUR and CINDER feed on low light; GAUNT's alcoves are the only lit safe
+spots. One mechanic, four uses — coherent design, cheap to implement, readable on camera.
 
-1. 0:00–0:20 — the gap: "Game Changers is named in this category, and GC teams have almost no
-   scouting tooling. GCRadar is built for them first."
-2. 0:20–0:50 — team dossier: roster, agent pools, form charts (real clicks, real data).
-3. 0:50–1:20 — matchup prep vs Cloud9 GC (sponsor-aligned moment, deliberate): ban-pressure
-   and pool-overlap views.
-4. 1:20–2:10 — mock draft vs that opponent's scouted pool: analyzer scores the comp live,
-   ranked counter-picks with reason chains; flip one matrix weight live to show transparency.
-5. 2:10–2:40 — one local-LLM coach line generated from the computed JSON, then toggle
-   "model offline" to prove the product still fully works — the local-first story.
-6. 2:40–3:00 — JetBrains evidence beat: Junie session on the matrix module, DataGrip on the
-   store; repo + methodology write-up close. (Methodology doubles as the AI-Workflow-Story
-   bonus entry: local-first privacy-preserving coaching stack on JetBrains + local vLLM.)
+## 6. Death / retry loop
 
-## 6. Rubric mapping — final adversarial scores (0.2 each, max 100)
+Death: 1.5 s freeze + vignette + epitaph card → respawn at checkpoint, doors inside the block
+re-lock and re-play their events (learnable, replayable). Deaths counter feeds the leaderboard
+tiebreak and the demo narrative ("watch them learn door 7").
 
-| Criterion | Score | Why it earns it |
-|---|---|---|
-| Technological Implementation | 8 | Non-trivial deterministic engine (state machine + matrix scoring + matchup conditioning) + DataGrip/Junie/IDE-depth evidence; the graft lifted this from raw GCRadar's 6 |
-| Design | 8 | One coherent hub, 5 capped screens, original design system; small-and-finished beats broad-and-half-built |
-| Potential Impact | 9 | Named, underserved, sponsor-championed audience (GC scene + Cloud9 GC team); field math: ~80 Cat-1 entries, almost none GC-specific |
-| Quality of Idea | 9 | GC-first + matchup-conditioned composition scoring = no direct competitor in field |
-| Presentation | 8 | Compact deterministic demo, sponsor-aligned matchup, offline-state proof moment; low fragility (no engine-credibility gamble) |
-| **Total** | **84 raw → 80 expected** | Risk discount for curation depth + matrix subjectivity |
+## 7. Deterministic core vs LLM flavor — the firewall
 
-## 7. Why each finalist lost (adversarial re-score)
+- **Deterministic TS owns everything:** movement, door state machine, entity schedules and
+  hitboxes, oil economy, scoring, leaderboard validation. The sim never reads LLM output.
+- **LLM (local vLLM via FastAPI proxy, optional) owns flavor only:** lore cards on door entry,
+  death epitaphs, item flavor lines. Frontend fires the request async with an 800 ms timeout;
+  on timeout/down it shows hand-authored fallback lines (≥30 canned per context). The game is
+  100% playable and fully scored with the LLM down — fallback text is first-class content.
+- LLM output is display-only DOM text; it is never parsed back into game state.
 
-- **ReadTheRound (raw 80 → expected 68):** feasibility 6 moonshot; the resolution engine is
-  the product and esports-savvy judges will attack its credibility on sight; if it half-works,
-  tech and presentation collapse together; weakest theme fit (trainer vs "scouting"). Highest
-  ceiling, worst floor — loses on expected value.
-- **LineupLab (76 → 74, runner-up):** safest build, best raw presentation (9), but idea 6 is a
-  hard ceiling ("Anki for lineups") and the interactive schematic drill is design-heavy under
-  its own design-8 assumption. It has no 9 anywhere; the winner has two. Keep as v2 module idea.
-- **Raw GCRadar (76 → 72):** Impact/Idea 9/9 kept, but tech 6 (CRUD+stats) is a Stage Two
-  liability and sparse GC data risks a thin-looking dashboard. The merge is literally the fix
-  its own ideas.json note prescribed.
-- **CompIQ (74 → 72):** no 9 anywhere, known genre, matrix subjectivity unshielded; its best
-  module is worth more grafted into the GC shell than standing alone.
-- **PatchDelta (72 → 70):** cleanest data story but Cat 2 is the crowded genre; impact story
-  broad but not sponsor-heartstringing; idea 7 ceiling.
-- **BuyMath (72 → 68):** impact 6 — narrow audience story; value-model credibility attack.
+## 8. MUST / SHOULD / CUT ladder (core loop is never cut)
 
-## 8. Top 3 kill-risks + mitigations
+**MUST (the game):** pointer-lock FPS movement; 24-door single floor with the fixed event
+schedule; all 4 entities with tells; lantern/oil + sconce refills; death→checkpoint retry;
+HUD (door number, door log, oil gauge); attract/idle-reset kiosk mode; original procedural art
++ WebAudio-synthesized sound; deterministic (seeded, identical every run).
+**SHOULD:** FastAPI+SQLite leaderboard with name entry; lore cards (LLM flavor); 2nd variant of
+each room archetype; gamepad support (Gamepad API) alongside mouse+keyboard; quality toggle
+(low/mid light budget); run card share screen.
+**CUT ladder, in order if time runs out:** (1) gamepad, (2) room 2nd variants → single variant,
+(3) LLM lore → canned-only, (4) TALLY entity → 3-entity roster (renumber schedule), (5) online
+leaderboard → localStorage high scores. **Never cut:** movement, doors, remaining entities'
+tells, lantern, retry loop, kiosk mode. Even compressed to a 36 h sprint, the MUST core
+(greybox corridor + GAUNT + lantern + checkpoints) is achievable — that is the feasibility floor.
 
-1. **GC seed dataset too thin → hub looks empty (Design+Impact collapse).** Mitigation: cap at
-   10–12 teams with deep fields; curation is a scheduled week-1 weekend task with a definition
-   of done (every team page renders populated charts); analyzer is data-independent so the
-   tech core never depends on curation depth.
-2. **Matrix subjectivity attacked by esports-literate judges.** Mitigation: per-edge
-   confidence + source notes; live-adjustable weights with an "explain this score" panel —
-   turn subjectivity into a transparency feature and a demo beat.
-3. **Two-module scope creep in 7 weeks.** Mitigation: hub capped at 5 screens; analyzer is
-   the centerpiece; weekly cut ladder (cut in order): LLM Q&A chat → GRID adapter →
-   form/trend charts → archetype tags. Never cut: analyzer, dossiers, matchup view, offline
-   state, JetBrains evidence.
-4. (Standing trap) **Demo URL vs unreachable local LLM:** offline-state design from day 1;
-   video + repo are primary evidence; deploy deterministic core to a free static+backend host
-   at submission time (operator approval gate).
+## 9. Tech plan
 
-## 9. If time runs out
+- **Frontend:** Vite + React + TS (scaffold exists; add `three` pinned, no react-three-fiber —
+  raw Three.js scene graph driven by a fixed-timestep sim loop inside one React shell; React
+  renders HUD/menus only; zustand for UI state). Pointer Lock API; WASD + mouse look + E
+  interact; Gamepad API as SHOULD.
+- **Art budget (all original, zero asset packs):** low-poly primitives + extrusions;
+  canvas-generated procedural textures (wood grain, plaster, noise); all sound synthesized in
+  WebAudio (original by construction, zero IP/copyright exposure). Door visuals reference the
+  operator's Door Workshop (C:/Users/Dell P7 03260/doors.html) for hinge/panel/knob detail —
+  re-implemented in Three.js, not copied.
+- **Perf budget (booth hardware unknown = assume mid-range laptop / Iris Xe):** ≤3 dynamic
+  point lights + emissive materials, no shadow maps (baked blob AO), merged static geometry per
+  room, <150 draw calls, 60 fps at 1080p target; dev FPS meter; low quality preset (smaller
+  light radius, no post pass). **Perf spike in week 2, before any art polish.**
+- **Backend:** FastAPI :8401 — `/flavor` (proxy to local vLLM, server-side timeout + fallback),
+  `/scores` (SQLite leaderboard, server-validated: max door + time sanity checks), `/health`.
+  Game runs fully with backend down (localStorage mirror of scores).
+- **JetBrains evidence:** WebStorm (TS/game), PyCharm (FastAPI), DataGrip (SQLite schema),
+  Junie sessions + committed `.idea`/`.junie` folders; methodology write-up = the AI-workflow
+  story. Rider is "recommended" for Cat 3, not required — web stack is allowed; say so in the
+  description.
 
-Cut in this order: (1) LLM Q&A chat, (2) GRID adapter, (3) form/trend charts, (4) archetype
-tags, (5) adjustable-weights UI (keep read-only confidence instead). The entry must still
-ship: dossiers + matchup view + analyzer + offline state + committed .idea/.junie evidence.
-A finished 4-screen hub with a working analyzer outscores a broad half-built trainer.
+## 10. Rubric mapping (5 × 0.2, equal weights)
 
-## 10. Immediate next actions (feed Phases 5–6)
+- **Technological Implementation (8/10):** a real first-person 3D game in the browser with a
+  fixed-timestep deterministic sim, scripted entity AI, light-economy systems, FastAPI+SQLite
+  leaderboard, LLM firewall with graceful degradation — visibly non-trivial; tool depth shown
+  across three JetBrains IDEs + Junie.
+- **Design (8/10):** one coherent loop end-to-end (attract → run → die → retry → leaderboard →
+  attract), one resource (oil) with four uses, consistent horror identity (Phase 6 replaces
+  tokens.css); small and finished, not broad and half-built.
+- **Potential Impact (7/10):** the weakest axis honestly — countered by booth-fit evidence:
+  kiosk idle-reset, 3–5 min sessions, checkpoints for first-timers, leaderboard for repeat
+  crowds. The credible audience is real and named: event organizers running booth floors
+  (Cloud9's own category use case), plus the huge Roblox-era corridor-horror audience reached
+  on the open web.
+- **Quality of the Idea (8/10):** "learnable horror, no unreadable RNG" manifesto + doors as a
+  diegetic entity (TALLY); a design essay the judges can quote, not just a genre clone.
+- **Presentation (9/10):** gameplay footage demos itself; scripted events make the video
+  reproducible take-after-take; death→retry→mastery is a ready-made 3-minute story arc.
+**Expected: 80/100 risk-adjusted.** A balanced entry beats a lopsided one under equal weights.
 
-- Register JetBrains All Products Pack + AI Ultimate codes NOW (supplies-limited).
-- 2h GRID spike → adapter or drop; decision does not gate the build.
-- Fresh public repo, LICENSE file day 1, commit .idea/.junie from first commit.
-- Week 1: seed dataset + data model + analyzer skeleton (TDD on matrix math).
+## 11. Finalist variants — adversarial re-score, why each lost
+
+Six scoped variants of the fixed concept, scored under the real 5×0.2 rubric with build-risk
+and demo-risk arguments:
+
+| Variant | TI | D | PI | QI | PR | Total | Fatal objection |
+|---|---|---|---|---|---|---|---|
+| **A. HALLWAKE — learnable corridor (WINNER)** | 8 | 8 | 7 | 8 | 9 | **80** | — |
+| B. Two-player co-op corridor (asymmetric booth duo) | 8 | 7 | 8 | 8 | 8 | 75 | Solo 7 weeks + netcode/sync + two-player booth choreography = build risk unacceptable; one broken sync bug kills the demo. |
+| C. Endless procedural floors | 7 | 6 | 6 | 6 | 7 | 66 | Kills the manifesto (runs differ → knowledge worthless → leaderboard meaningless); content variety to feel alive exceeds solo art budget. |
+| D. Puzzle-door rooms (each door = puzzle) | 7 | 7 | 6 | 6 | 6 | 66 | Puzzle authoring is content-heavy; booth first-timers stall on puzzles instead of dying-and-retrying; horror tension evaporates. |
+| E. Cinematic walking sim (no fail state) | 5 | 7 | 5 | 5 | 7 | 57 | No retry loop, no leaderboard, no skill expression — Implementation and Idea axes collapse; it's a screensaver. |
+| F. Extraction-lite with loot + meta progression | 8 | 6 | 6 | 7 | 6 | 67 | Meta-progression is a scope bomb; a 5-min booth session can't show a progression economy; demo becomes a menu walkthrough. |
+
+B was the strongest loser (duo play is genuinely better booth bait) — parked as post-hackathon
+iteration, mentioned in the video's outro as roadmap, never promised.
+
+## 12. Top 3 risks + concrete mitigations
+
+1. **3D perf on booth hardware** (kill-risk: a 20 fps horror game is a 20 fps demo).
+   Mitigation: week-2 perf spike on a low-power laptop BEFORE polish; hard budget (≤3 dynamic
+   lights, no shadow maps, merged static geometry, <150 draw calls); low quality preset wired
+   from day one; FPS meter in dev builds; QA phase runs the build on the weakest available machine.
+2. **Scope creep / art sink** (solo builder, 7 weeks to Jan 12 2027).
+   Mitigation: hard caps — 6 archetypes, 4 entities, 24 doors, procedural textures only,
+   WebAudio-synth only; greybox milestone (whole run playable with boxes) by end of week 3;
+   CUT ladder in §8 is pre-agreed, not negotiated mid-sprint; weekly "cut, don't cram" review.
+3. **IP safety** (LSPLASH/Rococo DOORS is litigious-adjacent; hackathon bans third-party marks).
+   Mitigation: coined title; original entity names/designs; zero DOORS assets or names;
+   `scripts/ip-check.sh` greps repo, comments, and the video script for banned terms and runs
+   in CI; manual frame pass over the final video; the reference doors.html is consulted for
+   generic door hardware detail only, re-implemented from scratch.
+
+## 13. Demo-video story (<3 min, YouTube-public, running in browser)
+
+0:00 attract screen idles, keypress starts run · 0:15 doors 1–3 calm, one lore card (LLM live,
+"flavor only" caption) · 0:40 door 7: lights flicker amber — GAUNT tell — hide in alcove,
+survive · 1:10 door 9: CINDER blue flames, sconce relight sequence · 1:35 door 10: MURMUR
+backing-away beam walk, then a MISTAKE — death card with epitaph · 1:55 instant checkpoint
+retry, door 10 beaten cleanly · 2:20 door 24 finale, run card, leaderboard entry, kiosk idle
+reset · 2:40 title card: manifesto line + JetBrains tool chain. Rehearsed to be reproducible:
+the schedule is deterministic, so every take is identical.
+
+## 14. If time runs out
+
+Cut in §8 order (gamepad → room variants → LLM lore → TALLY → online leaderboard). The last
+acceptable state is a 3-entity, single-variant, canned-text, local-high-score HALLWAKE — still
+a complete, coherent, demo-able entry. The first thing to protect is the loop: door → tell →
+counterplay → death → retry → leaderboard.

@@ -1,185 +1,187 @@
-# GCRadar — Design Identity Brief (Phase 6, 2026-11-18)
+# HALLWAKE — Design Identity Brief (Phase 6 REWRITE, 2026-11-18)
 
-Binding: `plan/idea.md` (contract), `plan/architecture.md` §8 (5-screen cap), `DESIGN_MANIFESTO.md` (law).
+Supersedes the GCRadar "scouting desk" brief entirely — that identity is void.
+Binding: `plan/idea.md` (contract), `plan/architecture.md` (HUD/kiosk needs), `DESIGN_MANIFESTO.md` (law).
 Token implementation: `app/frontend/src/identity/tokens.css` — the single import for every UI task.
+Original IP only: no DOORS/Roblox names, assets, or entity names anywhere.
 
-## 1. Concept — "the scouting desk"
+## 1. Concept — "the night porter's kit"
 
-GCRadar looks like a **front-office scouting desk**, not a gaming overlay. Reference tradition,
-combined freshly: **Swiss international grid** (numbered rows, ruled ledger tables, asymmetric
-columns) × **mid-century American sports media guide** (expanded grotesque mastheads, all-caps
-mono stat lines) × **terminal data culture** (monospace as the voice of numbers). No gamer-glow:
-no neon, no gradients, no glass. The product's credibility claim — deterministic numbers,
-curated sources — is expressed visually: everything is ruled, tabulated, and signed.
+HALLWAKE's UI is not an overlay on a game; it is **the working kit of the corridor's night
+porter** — the instruments a lamplighter would actually carry: a stenciled door numeral, a
+ruled logbook of doors opened, a brass oil gauge, chalk marks on the frame. Reference
+tradition, combined freshly: **American industrial signage** (painted condensed numerals,
+stencil tracking) × **ledger/print culture** (ruled rows, tabular mono, signed metadata) ×
+**lantern chiaroscuro** (bone-on-black; the interface is what light reveals, and darkness is
+the absence of interface). No gamer-HUD clichés: no neon, no glass, no sci-fi brackets.
 
-**Characteristic opening moment (Hub):** the page opens not with a hero but with a **draft-phase
-ribbon** — the real 18-step VCT pick/ban sequence (6+2 bans struck, 10 picks filled, alternating
-A/B) drawn as a full-width ruled tick-band under the masthead. It is the product's actual phase
-script rendered as the brand graphic: instantly says "draft tool", carries zero decoration, and
-reads at TV distance in the demo video.
+**The identity rule that makes it recognizable: color is danger, bone is information.**
+Every neutral UI mark — titles, numerals, labels, gauges, focus rings — is bone (the color of
+lantern-lit paper). The only saturated hues in the entire product are the four entity signals
+and the oil-critical alarm. The moment color appears on screen, it means something is hunting
+you. A player can learn the palette the way they learn the schedule: bone is safe, color is not.
 
-## 2. Palette — graphite desk, signal amber, one polarity axis
+**Characteristic opening moment (attract screen):** the page opens on **the door row** — all
+24 numerals `01–24` set as one full-width stenciled band across the black, Big Shoulders 900,
+bone on void, hairline rule beneath. A single lantern glow sweeps the row on a slow 6 s idle
+loop; the masthead `HALLWAKE` sits above it, `PRESS ANY KEY` breathes below in mono. It is the
+corridor itself — the product's core image rendered as brand graphic, zero decoration, and it
+reads at TV distance. Reduced-motion: the glow parks on `01`, no sweep, prompt static.
 
-Dark is the **default theme** (booth/TV legibility); light is opt-in via `data-theme="light"`.
-All ratios computed with WCAG relative luminance; chart palettes validated with the dataviz
-six-checks validator (`validate_palette.js`) against the real surfaces.
+## 2. Theme — dark-only, and that is a decision
 
-### Dark (default) — surfaces & ink
-| Token | Hex | On bg / surface |
+Single theme, no light mode. Justification: the fiction is darkness — the lantern is the
+light source and the resource; a white leaderboard/attract screen would break the fiction,
+glare at booth passersby, and read as a different product. The kiosk loop (attract → run →
+death → leaderboard) lives entirely in the dark register; `color-scheme: dark` only. This also
+removes an entire class of signal-contrast failure: entity tells are tuned against exactly
+one scene black (`#0A0A0E`, the fog color from architecture §3 — UI and world share one black).
+
+## 3. Palette — bone on void, four signals
+
+All ratios computed with WCAG relative luminance against page bg `#0A0A0E` and HUD plate
+`#101016`. Signal hues are reserved semantically and never used decoratively.
+
+### Surfaces & ink
+| Token | Hex | On bg / on plate |
 |---|---|---|
-| bg (page plane) | `#0E1113` | — |
-| surface (panels, charts) | `#161A1D` | — |
-| surface-raised (popovers) | `#1B2024` | — |
-| ink | `#F2F1EC` | 16.75 / 15.48 ✓ AAA |
-| ink-secondary | `#C4C9CD` | 11.35 / 10.49 ✓ AAA |
-| ink-muted (axis, meta) | `#8D949B` | 6.17 / 5.70 ✓ AA |
-| rule (hairline) | `#262C31` | 1.24 — decorative grid only |
-| rule-strong (baseline) | `#3A4248` | 2.1 — axis/baseline only |
+| bg (page plane = scene fog) | `#0A0A0E` | — |
+| plate (HUD text plates, flat) | `#101016` | — |
+| plate-sunken (gauge track, wells) | `#060609` | — |
+| rule (hairline) | `#23232E` | 1.27 — decorative rules only |
+| rule-strong (baselines) | `#3C3C4A` | 1.82 — gauge ticks, table baselines |
+| ink (bone) | `#EDE7DA` | 16.04 / 15.39 ✓ AAA |
+| ink-secondary | `#BFB8A9` | 10.02 / 9.61 ✓ AAA |
+| ink-muted (meta, axis) | `#857E70` | 4.91 / 4.71 ✓ AA |
 
-### Dark — signal & polarity
-| Token | Hex | Role | Contrast |
-|---|---|---|---|
-| accent `#F2A93B` | signal amber | selection, focus, magnitude bars, masthead underline | 9.49 on bg ✓ |
-| accent-ink `#0E1113` | text on amber fills | | 9.49 ✓ |
-| favor-mark `#2EA87F` | pick / synergy pole | chart marks | 5.85 on surface, ≥3:1 ✓ |
-| favor-text `#4CC79A` | W, +scores | text | 8.97 / 8.29 ✓ AA |
-| unfavor-mark `#E5604F` | ban / counter pole | chart marks | 5.10 on surface ✓ |
-| unfavor-text `#F0705E` | L, −scores | text | 6.48 / 5.99 ✓ AA |
-| neutral-mid `#333A40` | diverging midpoint | matrix zero cell | — |
+### Entity signals — semantic, functional, never decorative
+| Entity | Token | Hex | On bg / plate | Meaning |
+|---|---|---|---|---|
+| GAUNT | `--signal-gaunt` | `#F2A63C` | 9.69 / 9.29 ✓ | sodium-lamp amber: lights flicker twice, burn amber → hide |
+| TALLY | `--signal-tally` | `#D6574C` | 5.01 / 4.81 ✓ | chalk red: frame marks, numeral glows one beat → read the log |
+| CINDER | `--signal-cinder` | `#58B4E8` | 8.57 / 8.22 ✓ | spectral blue: flames turn blue, hiss → relight sconces |
+| MURMUR | `--signal-murmur` | `#C9C6BE` | 11.58 / 11.11 | **deliberately hueless** — MURMUR is darkness; its channel is luminance (beam sputter/dim) + audio + a hollow ring glyph |
 
-**One polarity axis runs through the whole product:** favorable (teal-green) ↔ unfavorable
-(vermilion). Pick/ban, synergy/counter, W/L are the same semantic family — color is never used
-for decoration or series identity. Validator (dark, surface `#161A1D`): diverging pair
-`#2EA87F ↔ #E5604F` — band ✓, chroma ✓, contrast ✓, normal-vision ΔE 27.1 ✓, CVD ΔE 7.6 =
-warn band, **legal because secondary encoding is built in**: every matrix cell also carries its
-signed value and axis letter (S/C), every W/L tick carries its letter.
+`--color-alarm` aliases `--signal-tally` for the oil-critical gauge: measured ΔE between a
+separate "oil red" and chalk red was 6.8 (perceptually the same red), so faking two reds would
+be a lie. One alarm red, disambiguated by **slot** (gauge is always bottom-left; TALLY red is
+always on a door numeral/frame), **motion** (oil critical pulses 1 Hz; TALLY glows one steady
+beat), and **audio** (distinct per-entity buses, architecture §8). Bone ink on an amber GAUNT
+chip: 9.69 ✓.
 
-### Diverging scale (matchup matrix heat)
-`#E5604F` (−2) · `#964B44` (−1) · `#333A40` (0) · `#31715F` (+1) · `#2EA87F` (+2).
-Cells always print the signed value — hue is never the sole channel.
+### Oil / lantern states — luminance, not hue
+The lantern dims by losing light, not by changing color: `--oil-high #E3D7BC` (13.84),
+`--oil-low #B5A888` (8.40, the 0.2–0.6 band), `--oil-critical` = alarm red (graphical 5.01 ✓;
+the % numeral stays bone so it never fails text AA). Amber belongs to GAUNT alone — the gauge
+never wears it.
 
-### Sequential ramp (pick rate, confidence, threat) — amber, ordinal
-Dark: `#6B4E14 · #8A6A1E · #B08A2E · #D2A845 · #F2C25E` — validator ✓ (monotone, ΔL gaps ≥0.06,
-light end 2.27:1, hue spread 5°). Magnitude is **amber, not the polarity pair** — magnitude and
-polarity never share a hue.
+### CVD separation (Lab ΔE, Machado protan/deutan simulation)
+gaunt↔tally 47.7 / 45.0 / 37.5 · gaunt↔cinder 102 / 112 / 105 · tally↔cinder 92 / 76 / 76 ·
+cinder↔murmur 42 / 47 / 47. The three chromatic tells stay far apart under simulation; MURMUR
+is intentionally near-ink (ΔE 12) because its signal is not hue. **Fairness rule: color is
+never the sole channel** — every tell also carries a distinct glyph (§6), a distinct audio cue,
+and a distinct motion signature.
 
-### Team accents (12, from `teams.accent`)
-OKLCH-even hue wheel at L 0.62 / C 0.115 — deliberately desaturated (media-guide print, not
-neon): `#C26869 #BD7042 #AA7D25 #8B8C2E #5F9752 #209C7B #009AA1 #2092BE #5C86CB #8679C6
-#A56EB1 #B96890`. Validator: band ✓ chroma ✓ contrast ≥3:1 ✓. All-pairs CVD separation is
-**structurally impossible at 12 hues** (the validator's own series cap), so the usage rule is
-hard: team accents are **identity chrome, never chart series** — always paired with the team's
-text tag, never more than two on screen (matchup A/B), where position + tag carry identity.
+## 4. Typography — three voices, strict roles
 
-### Light theme (opt-in)
-bg `#F4F3EF` · surface `#FBFAF7` · raised `#FFFFFF` · rule `#DDD9CF` · ink `#15181B` (17.07) ·
-secondary `#4B5257` (7.61) · muted `#6C7378` (4.61 ✓ AA) · accent-text `#8A5A00` (5.68) ·
-favor `#007756` mark / `#0E7A5F` text (5.07) · unfavor `#B93A28` (5.44) · neutral-mid
-`#E4E1D8` · diverging `#B93A28 · #CE8D80 · #E4E1D8 · #6FAC97 · #007756` (validator: ALL PASS) ·
-amber ramp `#C49F4D · #A8842F · #8A6A1E · #6B4E14` (validator ✓, light end 2.39:1).
-Team accents keep identical hexes across themes — color follows the entity.
-
-## 3. Typography — three voices, strict roles
-
-Self-hosted woff2 (variable, latin) in `app/frontend/public/fonts/`, OFL licenses alongside;
-`@font-face` lives in `tokens.css` so importing tokens brings the fonts.
+Self-hosted variable/static woff2 (latin) in `app/frontend/public/fonts/`, OFL licenses
+alongside; `@font-face` lives in `tokens.css` so importing tokens brings the fonts.
 
 | Voice | Family | Weights | Role |
 |---|---|---|---|
-| Structure | **Archivo** (wdth 100–125, wght 400–800) | 400–800 | masthead, screen titles, big score numerals (700–800, `font-stretch: 112%`, tracking −0.02em); all UI chrome text (400–600) |
-| Data | **JetBrains Mono** (400–700) | 400–700 | every number, tag, label, axis tick, matrix cell, phase step — `tabular-nums` always; micro-labels uppercase, +0.1em tracking, 10–11px |
-| Report | **Source Serif 4** (400–600, incl. italic) | 400–600 | the human voice: LLM narratives, edge source notes, dossier blurbs — italic 400, measure ≤68ch, line-height 1.6 |
+| Signage | **Big Shoulders Display** (variable 400–900) | 700–900 | masthead, screen titles, the big door numeral, leaderboard rank numerals — uppercase, `+0.04em` stencil tracking; condensed painted-door presence |
+| Instruments | **JetBrains Mono** (variable 400–700) | 400–700 | every HUD number, label, door log, gauge %, time, deaths, name entry — `tabular-nums` always; micro-labels uppercase `+0.1em` |
+| Typescript | **Courier Prime** (400, italic 400) | 400 | the human voice: lore cards, death epitaphs, run-card flavor — as if typed on the porter's typewriter; epitaphs italic, measure ≤62ch, line-height 1.6 |
 
-The rule that makes the system recognizable: **the desk speaks mono, the report speaks serif,
-the masthead speaks expanded grotesque.** No text is ever set in the wrong voice. (JetBrains
-Mono is also a quiet nod to the sponsor judge.)
+The contract: **the corridor is named in signage, the instruments read in mono, the dead are
+buried in typewriter.** No text is ever set in the wrong voice. (JetBrains Mono also nods to
+the sponsor without borrowing any JetBrains brand asset.)
 
-Scale (deliberate jumps, not a smooth ramp): 10 / 12 / 14 / 16 / 20 / 26 / 34 / 48 / 64px.
-Display numerals jump 2×+ from their labels (score 48px Archivo 800 over 10px mono label).
+Scale (deliberate jumps): 14 / 16 / 20 / 28 / 40 / 64 + fluid display. The door numeral is
+`clamp(96px, 14vh, 190px)` — it jumps ~7× from its label; the masthead `clamp(64px, 10vh, 140px)`.
 
-## 4. Space & composition
+## 5. Space & composition
 
-- 8px base: 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64 / 96.
-- 12-column grid, 20px gutters, max width 1440, 24px side gutters at phone width.
-- **Left rail** (220px, mono, numbered `01–05` nav) on ≥1024px; collapses to a top mono strip.
-- Asymmetry is default: content columns 7+5 or 8+4, never 6+6; headers left-aligned against
-  right-aligned mono metadata; generous negative space between analysis zones (48–64px).
-- **Ledger rows, not cards.** Lists/tables are ruled rows (44px, 1px `--color-rule`), square,
-  hover = 4% ink wash + `→` reveal. Cards exist only as the two floating panels (Explain,
-  Q&A) — and they are square with a 2px accent top-rule, not glass.
-- Borders: 1px hairlines everywhere; emphasis = 2px accent underline (selected/active), never
-  shadows. Radius: **0 everywhere**. Shadow: none, except floating panels `0 8px 24px rgba(0,0,0,.45)`.
-- Focus: 2px `--color-accent` outline, offset 2px, visible on every interactive element.
+- 8px base: 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64. HUD anchored to viewport corners inside a
+  **4% safe area** (`--hud-safe`) so nothing falls off a booth TV's overscan edge.
+- **Plates, not cards.** HUD text sits on flat `rgba(6,6,9,.72)` plates with a 1px bone-dim
+  rule — never backdrop-blur (perf budget + no glassmorphism). Radius **0 everywhere**.
+  Shadows are meaningless in the dark: elevation = plate + rule, never `box-shadow` glow.
+- Kiosk screens (attract / run card / leaderboard / name entry) are asymmetric editorial
+  layouts: masthead flush-left, metadata flush-right in mono, content bands separated by
+  hairline rules; leaderboard is a ruled ledger (rank numeral in Big Shoulders, stats in
+  tabular mono), never a card grid.
+- Focus: 2px bone outline, offset 2px, visible on every interactive element (name entry,
+  quality toggle). Empty states are diegetic: "NO RUNS LOGGED", "THE LOG IS CLEAN".
 
-## 5. Per-screen layout (architecture §8)
+## 6. Diegetic HUD rules
 
-1. **Hub** — masthead band: `GCRADAR` Archivo 800 expanded + mono meta line (season, counts,
-   deterministic-core status chip) + **phase ribbon** (§1). Then the team index as numbered
-   ledger rows `01–12`: accent chip, tag (Archivo 700), region (mono), W–L (mono tabular),
-   pick-rate sparkbar (amber). Search = ruled inline input, not a card. Empty search → mono
-   "NO MATCH IN INDEX".
-2. **Team Dossier** — header: big tag + name, mono record + event chips. Asymmetric 7+5:
-   roster ledger (left) / agent-pool tier grid (right): three banded zones SIGNATURE / SOLID /
-   FLEX, each agent row with amber pick-rate bar. Full-width form chart (§6). LLM blurb =
-   serif-italic block with 2px accent left-rule; offline state = dashed rule + mono
-   "MODEL OFFLINE — deterministic data unaffected".
-3. **Matchup Prep** — A vs B header split by a center rule (A flush-left, B flush-right).
-   Stacked analysis zones: pool overlap (shared agents centered between two tier-dotted
-   columns), ban pressure (ranked rows, amber threat bars, serif reason), role gaps (5 role
-   columns, coverage ticks + letters). Matrix summary = ruled rows with signed mono values.
-4. **Draft Board** — centerpiece. Center: 18-step draft ledger (phase label, actor, action
-   cell; bans struck + unfavor-marked, picks filled + favor-marked). Left: agent pool grid of
-   square cells (role letter, banned = strikethrough, picked = filled). Right: live scores as
-   48px Archivo numerals + ranked counter-picks with expandable reason chains. Explain/weights
-   panel slides from right (sliders + per-edge table with confidence dots).
-5. **Comp Lab** — sparse by design: 5 big square agent slots + ruled map tabs + optional
-   opponent select; score breakdown as 4 ruled amber meters (role/synergy/counter/map) + total
-   numeral; archetype tags as mono chips.
+| Element | Slot | Treatment |
+|---|---|---|
+| Door numeral | bottom-right | Big Shoulders 900, bone, `--hud-numeral`; turns `--signal-tally` for one beat only on TALLY tell |
+| Door log | top-left plate | mono `NEXT ▸ 06` + last three doors as ruled ledger ticks — the TALLY counterplay surface, so it is always on, never animated |
+| Oil gauge | bottom-left | vertical tube: sunken track, bone fill, ticks at 0.2/0.6, mono % beside it; fill dims to `--oil-low`, turns alarm red + 1 Hz pulse below 0.2 |
+| Tell indicator | center-bottom, above crosshair | entity glyph in signal color, appears only while a tell/event is live: GAUNT = tall slit, MURMUR = hollow ring, TALLY = four-stroke tally, CINDER = flame outline |
+| Interact prompt | center, below crosshair | mono bone `[E] OPEN 06`; appears only in range |
+| Death card | full screen | 1.5 s (matches the sim's 90-tick freeze): vignette + door numeral + epitaph in Courier Prime italic |
 
-## 6. Data-viz rules (hand-rolled SVG; dataviz six-checks validated)
+## 7. Motion & flicker — tells are information
 
-- **Matchup matrix:** square cells (28px), 2px surface gap between fills, diverging scale (§2),
-  signed value + axis letter printed in every cell (secondary encoding), confidence as a 4px
-  dot row under the value. Hover → edge note tooltip (serif).
-- **Confidence / pick-rate / threat bars:** 10px amber ordinal bars, square ends anchored to a
-  baseline rule, direct mono value label at bar end. Never a second axis.
-- **Form chart:** horizontal ruled timeline; W/L ticks (teal/verm) always lettered, score in
-  mono above; opponent tag beside tick. No area fills.
-- **Tier grid:** bands, not colors — tier is position + label; accent only as the chip.
-- Chrome: gridlines `--color-rule` hairline, axis labels mono muted, baselines `--color-rule-strong`.
-  Text always wears ink tokens (semantic text colors only for signed values). One axis, always.
-  Legends only for ≥2 series; ≤4 series also direct-labeled.
+Flicker is a tell, not decoration: it exists to say *GAUNT is coming*. Durations: 120 ms
+hover/press, 180 ms plate in/out, 400 ms CINDER blue-shift. GAUNT tell = two 180 ms blinks
+then steady amber for the sweep window. TALLY = one 1 s red beat. Oil critical = 1 Hz pulse.
+Attract sweep = 6 s idle loop (attract mode is functional kiosk signage, not ambient
+decoration). Easing `cubic-bezier(0.2, 0, 0, 1)`. No entrance animations, no parallax, no
+hover bounce.
 
-## 7. Motion — state-change only
+**Reduced-motion stays FAIR:** `prefers-reduced-motion: reduce` collapses flicker to a single
+200 ms crossfade **to the same steady state** (amber stays amber, blue stays blue), beam
+sputter becomes a steady dim, the oil pulse becomes steady alarm color. Counterplay windows
+(GAUNT's 6 s, TALLY's one beat, sconce orders) are sim-side and never change. Audio cues and
+door-log glyphs are untouched in every mode. A reduced-motion player reads every tell and
+counterplays identically — only the animation style changes.
 
-- Durations: 120ms (hover wash), 180ms (panel slide, row expand), 260ms (score-change flash:
-  the changed score cell's background pulses once via `--color-accent` at 12% — shows *what*
-  changed, nothing else animates).
-- Easing: `cubic-bezier(0.2, 0, 0, 1)` everywhere. No entrance animations, no parallax,
-  no counting numbers, no hover bounce.
-- `prefers-reduced-motion: reduce` → all motion tokens collapse to 0ms (done in tokens.css).
+## 8. Room archetype moods (6, procedural canvas art)
 
-## 8. Banned-patterns check (manifesto §Banned)
+- **Junction** — long sightlines, draft; stencil arrows burned into plaster; the door row's home.
+- **Guest room** — faded wallpaper stripes (canvas noise), single bed blob-AO; GAUNT's amber reads hardest here.
+- **Laundry / storage** — hanging cloth silhouettes, pipe drips; MURMUR's corners.
+- **Lounge** — dead armchairs, cold hearth; the calm that makes door 24 land.
+- **Boiler room** — pipe tangle, hiss; CINDER's home, blue flame on black iron.
+- **Washroom** — tile grid lines, porcelain glints; MURMUR's whisper chamber.
 
-1. Gradient headlines/hero — none; masthead is solid ink + amber rule.
-2. Neon glows — none; shadows off except floating panels.
-3. Glassmorphism — none; surfaces are flat graphite.
-4. Floating particles/blobs — none; the only graphic is the functional phase ribbon.
-5. Rounded cards everywhere — radius 0; ledger rows instead of cards.
-6. Default sidebar+card-grid dashboard — rail exists as editorial index, but content is
-   ruled ledgers with asymmetric zones; Hub opens on the ribbon, not a card grid.
-7. Gradient hero + slogan — none; opening is data (the ribbon).
-8. AI vector illustrations — none; zero imagery, original iconography = mono glyphs/letters.
-9. Decorative animation — none; motion is state-change only (§7).
-10. Inter-only / 8px-rounded everything — Archivo + JetBrains Mono + Source Serif 4, radius 0.
+Textures: canvas wood grain, plaster noise, tile lines, door numerals — 256–512 px, cached
+(architecture §7). HUD plates stay identical across archetypes: the kit does not change rooms.
 
-## 9. Originality self-critique
+## 9. Kiosk / TV legibility at 3 m
 
-What could not come from a template: the **phase-ribbon masthead** (brand graphic = the actual
-draft state machine); the **three-voice contract** (mono numbers / serif report / expanded
-masthead) enforced as a rule; **one polarity axis** for all favorable/unfavorable semantics with
-amber reserved for magnitude; **radius-0 ledger ledgers** with 2px accent underlines instead of
-shadows; team accents demoted to labeled identity chrome. A designer would recognize the hand
-in the signed, ruled, tabular treatment — every mark is a fact with a source, which is exactly
-the product's claim. Riot-IP posture: no logos (text tags), no Riot fonts/art, original
-iconography, palette is ours.
+Designed at 1080p, fluid-scaled by `vh` clamps so a 4K booth TV keeps proportions. Minimums:
+HUD micro-labels 14 px, body/mono 16 px, door numeral ≥96 px, masthead ≥64 px. Signal colors
+all ≥5:1 on both surfaces (above), so tells survive a bright booth reflecting off glass.
+Safe area 4%; no text over unlit geometry without a plate. Dev FPS meter stays mono bone,
+corner-anchored, never centered.
+
+## 10. Banned-patterns check (manifesto §Banned)
+
+1. Gradient headlines/hero — none; masthead is solid bone, the only "glow" is the functional attract lantern.
+2. Neon glows / shadow glows — none; elevation is plate + hairline.
+3. Glassmorphism — none; plates are flat rgba, no backdrop-blur.
+4. Floating particles/blobs — none; the only moving graphic is the attract door-row sweep (kiosk signage).
+5. Rounded cards everywhere — radius 0; plates and ruled ledgers instead.
+6. Default sidebar+card-grid dashboard — no dashboard; kiosk screens are asymmetric ruled bands.
+7. Gradient hero + slogan — the opening is the door row, the product's actual structure.
+8. AI vector illustrations — zero imagery; all art is procedural canvas/WebGL, glyphs are strokes.
+9. Decorative animation — motion is tell/state only; flicker is the game's alarm system.
+10. Inter-only / 8px-rounded everything — Big Shoulders + JetBrains Mono + Courier Prime, radius 0.
+
+## 11. Originality self-critique
+
+What could not come from a template: the **bone-is-information / color-is-danger contract**
+with hues semantically locked to four entities and validated by contrast + CVD math; the
+**door-row attract masthead** (brand graphic = the actual 24-door schedule); the **diegetic
+kit HUD** (logbook, oil tube, stenciled numeral) where every element is an object in the
+fiction; the **fair reduced-motion rule** — tells crossfade to the same steady signal so
+accessibility never costs fairness; the three-voice contract (signage / instruments /
+typewriter). A designer would recognize the hand in the restraint: a UI that withholds all
+color until the corridor turns hostile is exactly the product's thesis — learnable horror,
+readable signals.

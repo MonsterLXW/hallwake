@@ -1,41 +1,36 @@
-flowchart LR
-  subgraph client["Browser (Vite dev :8402 / static build)"]
-    UI["React 5 screens<br/>Hub Dossier Matchup DraftBoard CompLab"]
-    PANELS["Panels: Explain/Weights, AI Q&A,<br/>offline banner"]
-    UI --- PANELS
+flowchart TD
+  subgraph LOOP["Core loop — deterministic, identical every run (fixed event schedule)"]
+    A["Attract screen (kiosk idle)"] -->|"any key / gamepad"| B["Spawn at Door 1"]
+    B --> C["Enter room behind Door N"]
+    C --> D{"Event room?<br/>(schedule.ts table)"}
+    D -->|"safe room"| E["Oil refill / lore card (flavor)"]
+    D -->|"tell fires at fixed roomTick"| F["Read tell<br/>(flicker / whisper / chalk / blue flame)"]
+    F --> G{"Counterplay<br/>alcove | beam+back | log-vs-number | sconce order"}
+    G -->|"correct"| H["Door N opens -> advance"]
+    G -->|"fail"| I["Death card 1.5s<br/>(epitaph: LLM or canned)"]
+    I --> J["Respawn at checkpoint<br/>(1,5,9,13,17,21) block replays"]
+    J --> C
+    E --> H
+    H --> K{"Door 24 finale<br/>CINDER + GAUNT?"}
+    K -->|"no"| C
+    K -->|"survived"| L["Run card<br/>deepest door / time / deaths"]
+    L --> M["Name entry -> leaderboard"]
+    M -->|"30s idle"| A
   end
 
-  subgraph backend["FastAPI :8401"]
-    ROUTERS["Routers<br/>system catalog teams matchup draft comp matrix weights ai"]
-    STORE["services/store.py<br/>DB to analyzer-type loader"]
-    subgraph analyzer["Deterministic core (pure, pytest golden tests)"]
-      DRAFT["draft.py<br/>VCT-style state machine"]
-      MATRIX["matrix.py roles.py<br/>synergy counter role-coverage map-fit threat"]
-      RANK["ranking.py<br/>matchup-conditioned counter-picks + reason chains"]
-    end
-    LLM["services/llm.py<br/>httpx + Semaphore(1) + 12s timeout"]
-    GUARD["services/llm_guard.py<br/>novel-number guard, JSON schema"]
-    ROUTERS --> STORE
-    ROUTERS --> DRAFT
-    DRAFT --> MATRIX --> RANK
-    ROUTERS -. "narration only" .-> LLM
-    LLM --> GUARD
+  subgraph MODULES["Module map"]
+    CORE["src/core — pure deterministic sim<br/>schedule + entity FSMs + oil + scoring<br/>(vitest golden traces)"]
+    RENDER["src/render — Three.js scene graph<br/>roomBuilder (6 archetypes x2) + procedural<br/>canvas textures + budget.ts caps"]
+    AUDIO["src/audio — WebAudio synth graph<br/>cues keyed to SimEvents"]
+    UI["src/ui — React HUD (door log, oil gauge)<br/>+ attract/death/run/leaderboard screens"]
+    NET["src/net — flavorClient + scoresClient<br/>+ canned.ts fallbacks"]
+    API["FastAPI :8401<br/>/api/scores (SQLite, validated)<br/>/api/flavor (LLM firewall, 0.8s, canned)"]
+    LLM["local vLLM qwen3.8-flash-next<br/>(optional — game 100% playable down)"]
+    CORE -->|"SimState + SimEvents (one-way)"| RENDER
+    CORE -->|"SimEvents"| AUDIO
+    CORE -->|"HUD snapshot @10Hz"| UI
+    UI --> NET
+    NET -->|"flavor text: display-only, never parsed back"| UI
+    NET --> API
+    API -->|"flavor only; never game state"| LLM
   end
-
-  subgraph data["SQLite data/gcradar.db (DataGrip)"]
-    SEED["teams players agent_pools results<br/>agents maps agent_map"]
-    MX["matrix_edges<br/>confidence + note per edge"]
-    W["weights (adjustable)"]
-  end
-
-  VLLM["local vLLM :8890<br/>qwen3.8-flash-next"]
-  STATIC["valorant-api.com<br/>build-time fetch only"]
-
-  UI -- "REST JSON /api/* (stateless draft replay)" --> ROUTERS
-  STORE --> SEED
-  STORE --> MX
-  ROUTERS --> W
-  GUARD -- "OpenAI-compatible, no key" --> VLLM
-  STATIC -- "scripts/fetch_static.py" --> SEED
-  SEEDCSV["seed CSVs scripts/load_seed.py"] --> SEED
-  VLLM -. "offline -> available:false, app fully works" .-> LLM

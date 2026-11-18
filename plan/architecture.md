@@ -1,256 +1,276 @@
-# GCRadar — Technical Architecture (Phase 5, 2026-11-18)
+# HALLWAKE — architecture (Phase 5 REWRITE, 2026-11-18)
 
-Binding contract: `plan/idea.md`. Ports: backend **8401**, frontend **8402**. LLM: local vLLM
-`http://100.124.134.63:8890/v1`, model `qwen3.8-flash-next`, OpenAI-compatible, no key,
-narration-only firewall. App must be fully functional with the LLM down.
+Replaces the GCRadar architecture entirely. Binding contract from plan/idea.md:
+first-person horror corridor, 24 doors, 4 original entities, deterministic fixed
+schedule, lantern oil, checkpoints, LLM flavor-only, original procedural art/audio.
 
 ## 1. Stack + why
 
-| Layer | Choice | Rationale |
-|---|---|---|
-| Backend | **FastAPI + uvicorn (Python 3.12), stdlib `sqlite3`, no ORM** | The tech core is pure Python functions (state machine + matrix math) — PyCharm evidence + pytest golden tests. Raw SQL keeps the SQLite file a first-class artifact for **DataGrip**; an ORM would add a layer we never need. |
-| DB | **SQLite single file** `app/backend/data/gcradar.db` | Read-mostly curated store, one writer (seed script). Postgres buys nothing for 10–12 teams / ~300 edges. |
-| Frontend | **Vite + React 18 + TypeScript, `react-router-dom` only** | 5 screens, server is source of truth → no Redux/react-query. **Hand-rolled SVG charts** (bar, stacked bar, sparkline, tier grid, matrix heat cells): full control for the original design system, zero chart-lib dep, and form charts sit on the cut ladder anyway. |
-| Rust | **Not used** | Matrix is ~300 edges; scoring is microseconds in Python. Rust would only slow iteration. |
-| Realtime | **None** (see §7) | |
+- **Frontend: Vite + React 19 + TS (port 8402), raw Three.js (pinned `three@0.170`), no react-three-fiber.** The sim is a fixed-timestep pure reducer; R3F would fight that boundary. React renders HUD/menus only; the canvas is mounted once by a shell component. `zustand` for UI state (phase, HUD snapshot, leaderboard) — tiny, no router needed (kiosk has 4 screens, switched by uiStore phase).
+- **Game core: deterministic TypeScript in `src/core/` — zero imports of THREE/DOM/WebAudio.** `stepSim(state, frame) -> state` is pure; entity FSMs are pure functions; vitest golden traces (hand-written input frame sequences -> expected state snapshots) prove determinism headlessly. This is the testable heart and the demo-reproducibility guarantee.
+- **Backend: FastAPI (port 8401) + stdlib sqlite3.** Leaderboard + LLM flavor proxy ONLY. No ORM, no Postgres — one table, kiosk-scale writes. Flat layout matching the existing scaffold (`app/backend/main.py`, `routers/`, `tests/`).
+- **No Rust.** The sim is ~24 rooms x a few entities at 60 Hz — trivially TS-fast; Rust would cost iteration speed for zero measurable gain.
+- **Art/audio: procedural only.** Canvas-generated textures (wood grain, plaster, noise, door numerals) + WebAudio-synthesized cues. Zero downloaded assets = zero IP exposure, tiny repo.
+- **Perf target: 60 fps @1080p on mid laptop iGPU (Iris Xe class).** Hard budget in §7, enforced by a pure `budget.ts` counter + vitest, measured by a week-2 spike before any polish.
 
-No other frameworks. Deps: `fastapi uvicorn httpx pydantic pytest` / `react react-dom react-router-dom vitest typescript`.
-
-## 2. Topology
+## 2. Module map (frontend)
 
 ```
-Browser → Vite dev server :8402 (proxy /api → :8401) → FastAPI :8401
-FastAPI → SQLite file (curated store)
-FastAPI → vLLM :8890 (narration only; guarded; offline-degradable)
-scripts/fetch_static.py → valorant-api.com (build-time only) → data/static/*.json → seed tables
+src/core/      pure deterministic sim (no THREE/DOM)   <- golden-trace tested
+  types.ts     SimState, Frame, EntitySnapshot, SimEvent
+  schedule.ts  the 24-door table (archetype, variant, event, checkpoint)
+  sim.ts       createInitialState(), stepSim(state, frame) pure reducer
+  entities.ts  GAUNT/MURMUR/TALLY/CINDER FSM step functions (pure)
+  oil.ts       oil economy (drain, refill, 4x cinder drain)
+  scoring.ts   run card + leaderboard validation (mirrors backend rules)
+src/render/    Three.js scene graph, reads SimState only
+  scene.ts     renderer, camera rig, fog, quality presets
+  roomBuilder.ts  archetype geometry -> merged static meshes
+  textures.ts  procedural canvas textures (cached, 256-512px)
+  entities/    gaunt.ts murmur.ts tally.ts cinder.ts fx.ts (mesh factories + tell FX)
+  budget.ts    pure mesh/light/draw-call counter over a scene plan
+  playerController.ts  pointer lock, WASD, gamepad -> Frame
+  loop.ts      fixed-timestep accumulator (dt=1/60), render reads latest SimState
+  quality.ts   low/mid/high presets (light radius, texture size, fog density)
+src/audio/     WebAudio synth graph, triggered by SimEvents
+  graph.ts     buses + master chain; cues.ts     per-event synth cues
+src/ui/        React: Hud, AttractScreen, DeathCard, RunCard, Leaderboard,
+               NameEntry, LoreCard; state/uiStore.ts (zustand)
+src/net/       flavorClient.ts, scoresClient.ts, canned.ts (>=30 lines/kind)
 ```
-App never calls valorant-api.com at runtime. Static content = factual names only; no Riot art,
-no hotlinked assets, original iconography only.
 
-## 3. Data model (DDL — `app/backend/app/db/schema.sql`)
+Backend: `main.py` (app, CORS, router includes), `db.py` (schema+queries),
+`routers/scores.py`, `routers/flavor.py`, `llm.py` (vLLM client), `canned.py`.
+
+## 3. Scene graph
+
+```
+Scene (fog: exponential, color #0a0a0e)
+├─ RoomGroup            ONLY current room + prebuilt next room (2 alive max)
+│   ├─ StaticMerged     walls+floor+ceiling merged per room (1 draw call)
+│   ├─ PropsMerged      furniture merged per archetype (1-2 draw calls)
+│   ├─ DoorMesh         real door (canvas numeral texture) + TALLY fake door
+│   ├─ Sconces[]        3 emissive quads (CINDER rooms) — emissive mat, not lights
+│   ├─ Alcoves[]        pale-paint nooks (GAUNT rooms) — emissive trim
+│   └─ EntityGroup      active entity meshes (<=2 in finale)
+├─ PlayerRig (camera)
+│   └─ LanternSpot      THE single dynamic SpotLight (cone, distance ~ oil-scaled)
+├─ EventLights[]        <=2 dynamic PointLights, only during active events
+├─ BlobAO[]             dark disc meshes under props/entities ("baked" AO)
+└─ (no post-processing pass; vignette is a CSS overlay div)
+```
+
+Light rule: 1 lantern SpotLight + at most 2 event PointLights = <=3 dynamic
+lights, **no shadow maps anywhere**. "Baked look" = emissive materials + blob AO
+discs + fog falloff + a pre-rendered canvas lightmap gradient on walls.
+
+## 4. Room archetype system + 24-door layout
+
+6 archetypes x 2 greybox variants (A/B). Geometry authored as data in
+`roomBuilder.ts` (box primitives + extrusions), merged per room. Variant B =
+mirrored plan + swapped prop set; same nav points (alcove/exit/sconce anchors
+identical so entity paths stay schedule-keyed).
+
+Fixed table (schedule.ts — identical every run; this IS the manifesto):
+
+| Door | Archetype.Var | Event | Checkpoint |
+|---|---|---|---|
+| 1  | junction A  | spawn | yes |
+| 2  | guest A     | safe (oil) | |
+| 3  | wash A      | safe (lore) | |
+| 4  | junction B  | safe | |
+| 5  | junction A  | TALLY | yes |
+| 6  | laundry A   | safe (oil) | |
+| 7  | guest A     | GAUNT | |
+| 8  | lounge A    | safe (oil) | |
+| 9  | boiler A    | CINDER | yes |
+| 10 | laundry B   | MURMUR | |
+| 11 | guest B     | safe (lore) | |
+| 12 | junction B  | TALLY | |
+| 13 | guest A     | GAUNT | yes |
+| 14 | wash B      | safe (oil) | |
+| 15 | boiler B    | CINDER | |
+| 16 | laundry A   | MURMUR | |
+| 17 | lounge B    | safe | yes |
+| 18 | junction A  | TALLY | |
+| 19 | guest B     | GAUNT | |
+| 20 | wash A      | safe (oil+lore) | |
+| 21 | boiler A    | CINDER | yes |
+| 22 | laundry B   | MURMUR | |
+| 23 | lounge A    | safe (oil) | |
+| 24 | boiler B    | FINALE: CINDER + GAUNT | |
+
+Per-door deterministic params (in schedule.ts): GAUNT sweep path + alcove index
+per door; CINDER sconce relight order per door (9:[0,1,2] 15:[2,0,1] 21:[1,2,0]
+24:[0,2,1]); MURMUR spawn corner; TALLY fake numeral = expected+2 (never equals
+the door log's expected number).
+
+## 5. Entity state machines (tell -> event -> counterplay)
+
+All FSMs live in `entities.ts`, stepped inside `stepSim`. Triggers are keyed to
+(doorIndex, roomTick) — e.g. GAUNT tell fires at roomTick=60 on entry to doors
+7/13/19. No RNG in the sim; even "organic" variation is a fixed per-door table.
+
+**GAUNT** (doors 7,13,19 + finale): IDLE -> TELL (roomTick 60..204: every light
+flickers twice then burns amber; door-slam cue) -> SWEEP (6.0 s along the door's
+fixed path at 3.5 m/s) -> RESOLVE: player inside the door's alcove AND
+|velocity| < 0.2 m/s for the sweep duration -> SURVIVED, else DEATH.
+Counterplay: step into the pale-paint alcove, stand still until amber fades.
+
+**MURMUR** (doors 10,16,22): spawns far corner. Every 60 ticks: if inside the
+lantern cone (|yaw diff| <= 25 deg AND oil > 0.20) -> frozen; else advance one
+1.2 m step toward player. Distance < 1.5 m -> DEATH. Tell: whisper gain
+proportional to facing dot; lantern beam sputter FX when it is in the cone.
+Counterplay: keep the beam on it, back toward the exit door — oil IS the clock.
+
+**TALLY** (doors 5,12,18): IDLE -> TELL (chalk tally marks on frame; numeral
+glows red for 1 s) -> FAKE_SPAWN (duplicate door mesh, numeral = expected+2).
+Opening the fake door -> DEATH (it is a mouth). Opening the real door (numeral
+== door log expected) -> advance. Counterplay: read the HUD door log.
+
+**CINDER** (doors 9,15,21 + finale): IDLE -> TELL (flames turn blue, rising
+hiss, oil drain x4) -> BLACKOUT (sconces extinguish one per 3 s; lantern radius
+shrinks with oil) -> RELIGHT: interact with the 3 sconces in the door's scratch
+order; each correct -> next; wrong order resets sequence. All 3 -> BANISHED,
+oil refills to 0.60. Oil reaching 0 -> early GAUNT spawn -> DEATH.
+
+**Door 24 finale**: CINDER blackout and GAUNT sweep run concurrently (GAUNT
+tell delayed to roomTick 300 so the player must relight sconces AND reach the
+alcove). Surviving opens the exit -> run card.
+
+Death event: sim sets alive=false, freezes input for 90 ticks (1.5 s),
+respawns at checkpoint door; doors inside the block re-lock and replay events.
+
+## 6. Player loop, input, HUD
+
+- **Movement:** walk 2.2 m/s, no sprint (booth: no stamina bookkeeping);
+  collision = per-room AABB list from the archetype table (pure, in core).
+- **Lantern oil:** scalar 0..1; drain 1/90 per second lit; sconce refills and
+  safe-room oil cans set +0.35 (cap 1); CINDER drains x4; radius = 2 + 6*oil m.
+  Below 0.20: tell FX suppressed (sim still fires events with `visible:false`),
+  MURMUR/CINDER get stronger. One resource, four uses.
+- **Checkpoints:** entering door in {1,5,9,13,17,21} sets checkpoint. Death ->
+  respawn there with oil 0.6. Deaths counter feeds tiebreak + demo arc.
+- **Input:** Pointer Lock API; WASD move, mouse look, E interact, Esc releases
+  lock (pause overlay). Gamepad (SHOULD, same Frame producer): left stick move,
+  right stick look, A/X interact. **Booth note: gamepad is the preferred kiosk
+  input** — pointer lock on a shared kiosk mouse is hostile; both feed the same
+  deterministic Frame stream, so gamepad adds zero sim risk.
+- **HUD (React, reads a 10 Hz HUD snapshot from uiStore):** big door numeral;
+  **door log** ("next: 6") — the TALLY counterplay surface; oil gauge (amber ->
+  red under 0.2); tell indicator; interact prompt. Kiosk screens: attract
+  (30 s idle auto-reset), death card (1.5 s + epitaph), run card (deepest door,
+  time, deaths), leaderboard + name entry.
+
+## 7. Render budget (enforced, not aspirational)
+
+`budget.ts` computes {drawCalls, dynamicLights, triangles, texturesMB} from the
+scene plan (pure data, no WebGL) and vitest asserts the caps:
+**<=150 draw calls, <=3 dynamic lights, 0 shadow maps, <=120k tris, <=8 MB
+canvas textures.** Current-room-only + next-room preload keeps the live scene
+at ~2 rooms. Merged static geometry: 3-5 draws/room. Textures: 256 px props,
+512 px walls, generated once, cached by key. Quality presets: low = lantern
+radius x0.7, 256 px textures, denser fog; mid = default; high = +1 event light.
+Dev FPS meter (toggle `?fps=1`). Week-2 spike measures real fps on the weakest
+machine before any art polish (roadmap W2).
+
+## 8. Audio graph (WebAudio synth only — original by construction)
+
+```
+masterGain -> DynamicsCompressor -> destination
+ ├─ ambienceBus   brown-noise loop + 55 Hz sine drone (always on, gain 0.15)
+ ├─ doorBus       thud: noise burst + lowpass sweep (open/slam)
+ ├─ gauntBus      slam cue + amber hum (sawtooth 90 Hz + tremolo)
+ ├─ murmurBus     whisper: filtered noise bursts, gain = facing dot (deterministic)
+ ├─ tallyBus      chalk scratch (short bandpass noise), red-glow ping
+ └─ cinderBus     blue-flame hiss (sawtooth rising sweep), sconce relight chime
+```
+`cues.ts` maps SimEvent.type -> synth recipe (pure data; vitest asserts every
+event type has a cue). AudioContext created lazily on first input (kiosk
+keypress resumes it). Zero audio files.
+
+## 9. Data model (SQLite, `app/backend/data/hallwake.db`)
 
 ```sql
-PRAGMA foreign_keys = ON;
-
-CREATE TABLE teams (
-  id INTEGER PRIMARY KEY,
-  name TEXT NOT NULL,
-  tag TEXT NOT NULL UNIQUE,                  -- 3-4 char text tag; NO logos/trademarks
-  region TEXT NOT NULL,
-  accent TEXT NOT NULL,                      -- design-token hex, original palette
-  notes TEXT
+CREATE TABLE IF NOT EXISTS scores (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  name          TEXT    NOT NULL,               -- 1..12 chars, [A-Za-z0-9 .'-]
+  deepest_door  INTEGER NOT NULL CHECK (deepest_door BETWEEN 1 AND 24),
+  run_time_ms   INTEGER NOT NULL CHECK (run_time_ms BETWEEN 10000 AND 1800000),
+  deaths        INTEGER NOT NULL DEFAULT 0 CHECK (deaths BETWEEN 0 AND 99),
+  seed          INTEGER NOT NULL,               -- run seed (schedule is fixed; seed = run id)
+  created_at    TEXT    NOT NULL                -- ISO-8601 UTC
 );
-
-CREATE TABLE players (
-  id INTEGER PRIMARY KEY,
-  team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-  gamertag TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('Duelist','Initiator','Controller','Sentinel','Warden')),
-  country TEXT,
-  joined TEXT                                -- ISO date, nullable
-);
-
-CREATE TABLE agents (
-  code TEXT PRIMARY KEY,                     -- lowercase slug, e.g. 'jett'
-  name TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('Duelist','Initiator','Controller','Sentinel','Warden')),
-  release_order INTEGER
-);
-
-CREATE TABLE maps (
-  code TEXT PRIMARY KEY,
-  name TEXT NOT NULL
-);
-
-CREATE TABLE agent_pools (                   -- team comfort tiers (the scouted pool)
-  team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-  agent_code TEXT NOT NULL REFERENCES agents(code),
-  tier INTEGER NOT NULL CHECK (tier IN (1,2,3)),   -- 1 signature, 2 solid, 3 flex
-  pick_rate REAL NOT NULL DEFAULT 0 CHECK (pick_rate BETWEEN 0 AND 1),
-  primary_map TEXT REFERENCES maps(code),
-  note TEXT,
-  PRIMARY KEY (team_id, agent_code)
-);
-
-CREATE TABLE agent_map (                     -- scene-wide play rate per map
-  agent_code TEXT NOT NULL REFERENCES agents(code),
-  map_code TEXT NOT NULL REFERENCES maps(code),
-  play_rate REAL NOT NULL DEFAULT 0 CHECK (play_rate BETWEEN 0 AND 1),
-  note TEXT,
-  PRIMARY KEY (agent_code, map_code)
-);
-
-CREATE TABLE results (
-  id INTEGER PRIMARY KEY,
-  team_a INTEGER NOT NULL REFERENCES teams(id),
-  team_b INTEGER NOT NULL REFERENCES teams(id),
-  map_code TEXT REFERENCES maps(code),       -- NULL = series-level result
-  date TEXT NOT NULL,
-  event_tag TEXT NOT NULL,
-  score_a INTEGER NOT NULL CHECK (score_a BETWEEN 0 AND 13),
-  score_b INTEGER NOT NULL CHECK (score_b BETWEEN 0 AND 13),
-  CHECK (team_a <> team_b)
-);
-
-CREATE TABLE matrix_edges (                  -- curated synergy/counter matrix
-  id INTEGER PRIMARY KEY,
-  agent_a TEXT NOT NULL REFERENCES agents(code),
-  agent_b TEXT NOT NULL REFERENCES agents(code),
-  axis TEXT NOT NULL CHECK (axis IN ('synergy','counter')),
-  score REAL NOT NULL CHECK (score BETWEEN -1 AND 1),
-  confidence REAL NOT NULL DEFAULT 0.7 CHECK (confidence BETWEEN 0 AND 1),
-  note TEXT NOT NULL,                        -- source/rationale REQUIRED on every edge
-  CHECK (agent_a <> agent_b),
-  UNIQUE (agent_a, agent_b, axis)
-);
--- 'counter' is directional: (a,b,'counter',+s) = a counters b. 'synergy' is symmetric;
--- the loader treats synergy edges as (a,b)==(b,a).
-
-CREATE TABLE weights (                       -- adjustable, live-editable, echoed in every score
-  key TEXT PRIMARY KEY CHECK (key IN ('role','synergy','counter','map','threat')),
-  value REAL NOT NULL CHECK (value BETWEEN 0 AND 2),
-  label TEXT NOT NULL
-);
-
-CREATE TABLE archetypes (                    -- cut-ladder #4; tables may ship with UI cut
-  code TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  description TEXT NOT NULL
-);
-CREATE TABLE archetype_agents (
-  archetype TEXT NOT NULL REFERENCES archetypes(code),
-  agent_code TEXT NOT NULL REFERENCES agents(code),
-  weight REAL NOT NULL DEFAULT 1,
-  PRIMARY KEY (archetype, agent_code)
-);
+CREATE INDEX IF NOT EXISTS idx_scores_rank
+  ON scores (deepest_door DESC, run_time_ms ASC, deaths ASC);
 ```
+DB file is created on startup by `db.py` (executes the DDL above verbatim).
+Frontend mirrors the same validation in `core/scoring.ts` and keeps a
+localStorage mirror (`hallwake.scores.local`, last 20) so the kiosk works with
+the backend down.
 
-## 4. Deterministic analyzer spec (`app/backend/app/analyzer/` — pure functions, no I/O)
+## 10. API contract (FastAPI :8401; frontend proxies /api via vite)
 
-Input types (`types.py`, dataclasses): `Edge(agent_a, agent_b, axis, score, confidence, note)`,
-`AgentMeta(code, role)`, `PoolEntry(agent_code, tier, pick_rate)`, `Weights(role, synergy,
-counter, map, threat)`. All functions take these plain structures; DB→type loading lives in
-`app/services/store.py` (task T4), so the analyzer is testable with in-memory fixtures.
-
-### 4.1 Draft state machine (`draft.py`) — VCT-style, factual rules
-Phase script (data-driven constant `PHASE_SCRIPT`, so a rules fix is one edit):
-1. `side` — Team A chooses attacker/defender.
-2. Ban phase 1 — 6 bans alternating **B,A,B,A,B,A**.
-3. Pick phase 1 — 8 picks in order **A,B,B,A,A,B,B,A** (each team 4).
-4. Ban phase 2 — 2 bans **B,A**.
-5. Counter-pick — 2 picks **B,A**. (Total: 8 bans, 10 picks, 5 agents per team.)
-
-`Action = {type: 'side'|'ban'|'pick', team: 'A'|'B', agent?: str, side?: 'attack'|'defend'}`.
-`replay(actions) -> DraftState {phase_index, next_actor, bans, picks{A,B}, sides, legality{ok, error}}`.
-Illegal iff: wrong team's turn, agent already banned/picked, re-pick of same agent, unknown
-agent code, or action after completion. Final state must have exactly 5 picks per team.
-The API is **stateless**: client sends the full action list each request; server replays.
-No session store, trivially testable, restart-proof.
-
-### 4.2 Scoring (`matrix.py`, `roles.py`) — every number on every screen comes from here
-- `role_coverage(comp)`: `|distinct roles| / 5`, minus 0.1 per role held by >2 agents, floor 0. → [0,1]
-- `synergy(comp)`: over all unordered pairs, `sum(edge.score * edge.confidence)` (missing edge = 0), `/ max(1, |pairs|)`. → [-1,1]
-- `counter_vs(ally, enemy)`: over all a×e pairs: `+edge(a,e,'counter')` if a counters e, `-edge(e,a,'counter')` if e counters a, each `* confidence`, `/ (|ally|*|enemy|)`. → [-1,1]
-- `map_fit(comp, map)`: mean of `agent_map[agent,map].play_rate`. → [0,1]
-- `threat(agent, opponent_pool)`: tier base {1:1.0, 2:0.6, 3:0.3, absent:0} `* (0.5 + 0.5*pick_rate)`. → [0,1]
-- `comp_score = 100 * ( w_role*role_coverage + w_syn*synergy_n + w_ctr*counter_n + w_map*map_fit ) / (w_role+w_syn+w_ctr+w_map)` where `x_n = (x+1)/2` for the [-1,1] terms. → [0,100]
-- `counter_pick_ranking(ally_comp, enemy_comp, available, opponent_pool, map, weights)`: for each available agent, `rank = w_ctr*counter_n(single vs enemy) + w_threat*threat(agent, opponent_pool) + w_map*map_fit(single) + w_role*role_need` where `role_need = 1.0` if ally lacks that role, `0.3` if held once, else `0`. Return top 5, each with a **reason chain**: the top-3 contributing edges (agent pair, score, confidence, note) plus threat/role facts. This is the matchup-conditioned differentiator.
-- Every response echoes the exact `weights` used (transparency panel + demo beat).
-
-### 4.3 Golden tests (`app/backend/tests/`)
-Hand-computed JSON fixtures in `tests/golden/` (expected values written by hand BEFORE code):
-`fixture_small.json` (2×5 comp, 6 edges, expected comp_score to 4 dp), `fixture_counter.json`
-(ranked counter-pick order + reason chains), `fixture_draft_flow.json` (full 18-action legal
-draft + 4 illegal-action cases). `pytest` must pass with zero network.
-
-## 5. API contract (FastAPI, prefix `/api`; JSON; pydantic-validated)
-
-| Method/Path | Description | Request → Response |
+| Method/Path | Purpose | Request -> Response |
 |---|---|---|
-| GET `/api/health` | liveness + LLM reachability | → `{status:'ok', llm:{online:bool, model:str, checked_at}}` |
-| GET `/api/agents` | static agent catalog | → `{agents:[{code,name,role}]}` |
-| GET `/api/maps` | static map catalog | → `{maps:[{code,name}]}` |
-| GET `/api/teams` | team list for hub | → `{teams:[{id,name,tag,region,accent,record:{w,l}}]}` |
-| GET `/api/teams/{id}` | dossier payload | → `{team, roster:[{gamertag,role,country}], pool:[{agent_code,tier,pick_rate,note}], events:[str]}` |
-| GET `/api/teams/{id}/form` | form series for charts | → `{series:[{date,event_tag,opponent_tag,result:'W'|'L',score}]}` |
-| GET `/api/matchup?team_a=&team_b=` | computed matchup prep | → `{overlap:[{agent_code,tier_a,tier_b}], ban_pressure:[{agent_code,threat,reason}], role_gaps:{A:[roles],B:[roles]}, matrix_summary:{top_synergies:[edge],top_counters:[edge]}}` |
-| POST `/api/draft/score` | replay draft + live scores + counter-picks | `{map_code, team_a_id, team_b_id, actions:[Action], weights?}` → `{state, legality, scores:{A:comp_score_breakdown, B:...}, counterpicks:{A:[RankedPick],B:[RankedPick]}, weights_used}` |
-| GET `/api/weights` | current weights | → `{weights:[{key,value,label}]}` |
-| PUT `/api/weights` | adjust (transparency demo) | `{weights:[{key,value}]}` → same as GET |
-| POST `/api/comp/analyze` | standalone comp score (Comp Lab) | `{agents:[5 codes], map_code, opponent_team_id?}` → `{score, breakdown:{role,synergy,counter,map}, counterpicks:[RankedPick]?, archetypes?:[code]}` |
-| GET `/api/matrix?agent=` | edges for explain panel | → `{edges:[{agent_a,agent_b,axis,score,confidence,note}]}` |
-| POST `/api/ai/narrate` | LLM narration (never computes) | `{kind:'dossier'|'draft'|'bullets', id}` → `{available:true, text}` or `{available:false, reason:'model_offline'}` — **always HTTP 200** |
-| POST `/api/ai/qa` | Q&A over computed stats (cut-first) | `{question, scope:{kind:'team'|'draft'|'comp', id}}` → `{available:true, answer, cites:[stat_keys]}` or `{available:false}` |
+| GET /health | liveness + LLM probe cache | -> `{status:"ok", llm:{online:bool, model:string}}` |
+| GET /api/scores?limit=10 | leaderboard (limit 1..50, default 10) | -> `{scores:[{id,name,deepest_door,run_time_ms,deaths,created_at}]}` ordered by idx_scores_rank |
+| POST /api/scores | submit run (server-validated) | `{name,deepest_door,run_time_ms,deaths,seed}` -> 201 `{ok:true,id,rank}`; invalid -> 422 `{ok:false,error:string}` |
+| POST /api/flavor | LLM flavor (display-only) | `{kind:"lore"\|"epitaph"\|"run", door:1..24, entity?:string, deaths?:0..99}` -> 200 `{available:bool, source:"llm"\|"canned", text:string}` (text <=240 chars, single line) |
 
-`RankedPick = {agent_code, rank_score, reasons:[{kind:'edge'|'threat'|'role'|'map', text, confidence?}]}`.
-`comp_score_breakdown = {total, parts:{role,synergy,counter,map}, weights_used}`.
+Validation (server, mirrors core/scoring.ts): name regex `^[A-Za-z0-9 .'-]{1,12}$`;
+deepest_door 1..24; run_time_ms 10000..1800000; deaths 0..99; seed int.
+Unknown fields ignored; extra keys never 5xx. CORS: allow
+`http://localhost:8402` and `http://127.0.0.1:8402`. `/api/flavor` NEVER
+returns 5xx — LLM down is a 200 with `source:"canned"`.
 
-## 6. LLM layer (`app/services/llm.py` + `app/routers/ai.py`) — narration-only firewall
+## 11. LLM flavor firewall (binding)
 
-- Client: `httpx.AsyncClient`, base URL env `GCRADAR_LLM_URL` (default the vLLM host), model
-  `qwen3.8-flash-next`, no key. **`asyncio.Semaphore(1)`** — one local engine, serialize
-  requests. Timeout 12 s, **no retry** (fail fast, demo-safe).
-- Health probe: `GET /models` cached 30 s; result feeds `/api/health` and the frontend's
-  global "model offline" banner.
-- Inputs are **only** the deterministic layer's JSON (server-built; the client never sends
-  facts). System prompt: restate only facts present in CONTEXT; introduce no new names or
-  numbers. Output forced JSON (`response_format={"type":"json_object"}`) validated against a
-  per-kind pydantic schema; prompts kept small (<1.5k tokens) for the local model.
-- **Novel-number guard** (`app/services/llm_guard.py`): extract numeric tokens from output; any
-  number not present in the input context → discard output, return `{available:false,
-  reason:'guard_rejected'}`. The LLM never emits a stat.
-- Degrade behavior: any failure (timeout, refused, schema-invalid, guard) → HTTP 200
-  `{available:false}`. Zero deterministic feature degrades; frontend renders a clear
-  "model offline" placeholder. Never a 5xx for LLM-down.
-- Tests: httpx MockTransport fixtures (offline, slow, garbage-output, guard-hit) + one
-  `@pytest.mark.live` test that hits the real vLLM only if reachable (skipped in CI).
+- **Deterministic TS owns everything.** The sim never reads flavor text; flavor
+  text is display-only DOM (`textContent`, never innerHTML, never parsed).
+- **Server (`routers/flavor.py` + `llm.py`):** httpx.AsyncClient to
+  `http://100.124.134.63:8890/v1` (env `HF_LLM_URL`), model `qwen3.8-flash-next`
+  (env `HF_LLM_MODEL`), no key, **timeout 0.8 s, no retries**, semaphore(1).
+  Prompt per kind (lore: door+archetype+entity, epitaph: door+entity+deaths,
+  run: door+time+deaths), max_tokens 80, temp 0.8. Response sanitized: strip
+  control chars/HTML, collapse to one line, truncate 240. Any failure (timeout,
+  offline, empty, garbage) -> 200 `{available:false, source:"canned", text}`
+  from `canned.py` pools (>=30 lines/kind, chosen by `(kind, door) % len` —
+  deterministic).
+- **Client (`net/flavorClient.ts`):** AbortController 800 ms; on any failure use
+  local `canned.ts` (>=30/kind). Fallback text is first-class content; the game
+  is 100% playable and fully scored with backend AND LLM down.
+- LLM output never influences: entity triggers, oil, scoring, leaderboard.
 
-## 7. Realtime: none — justified
+## 12. ip-check.sh spec (`scripts/ip-check.sh`)
 
-Single-user scouting tool. Every state change is a user-initiated request/response
-(stateless draft replay in §4.1). No concurrent editors, no live-match ingestion (cut in
-idea.md), no multiplayer. WebSockets/polling/SSE would add failure modes and zero value.
-The only "push" need is LLM-offline status, handled by the cached health probe on load.
+Purpose: CI gate that no DOORS/Roblox IP leaks into shipped material.
+- Scan roots: `app/`, `scripts/`, `.github/`, `README*` (repo root).
+- Excludes: `node_modules/`, `dist/`, `.venv/`, `.git/`, `data/`, `plan/`,
+  `research/` (internal planning docs discuss the genre meta; they are not
+  shipped).
+- Case-insensitive patterns: `roblox`, `lsplash`, `rococo`, `screech`, `stonk`,
+  `amity`, `dupe`, `hallwake`-knockoffs n/a. Case-sensitive whole-word
+  patterns (generic English words, so case-guarded): `DOORS`, `Rush`, `Figure`,
+  `Halt`, `Glitch`, `Jeff`, `Eyes`, `Blink`.
+- Implementation: `grep -rnwE` per pattern set with `--exclude-dir` flags;
+  print `file:line:match`; exit 1 on any hit, 0 clean.
+- `--selftest`: writes a temp file containing `Roblox` under a mktemp dir,
+  runs the scan against it, asserts exit 1; then asserts clean repo scan exits
+  0. Both must pass for the script to exit 0.
+- CI (`.github/workflows/ci.yml`): ip-check + `npm run build` + `npx vitest run`
+  + `python -m pytest -q` on every push.
 
-## 8. Screen inventory (5 — hard cap)
+## 13. Determinism + testing strategy
 
-1. **Hub** — team grid (tag, region, record), search.
-2. **Team Dossier** — roster, agent-pool tier grid, form chart, event tags, LLM blurb panel.
-3. **Matchup Prep** — A vs B: pool overlap, ban-pressure, role gaps, matrix summary.
-4. **Draft Board** — pick/ban board, live comp scores, ranked counter-picks with reason
-   chains; **Explain/weights side panel** (panel, not a screen).
-5. **Comp Lab** — pick 5 + map + optional opponent → score breakdown + archetype tags.
-
-LLM Q&A is a **panel** inside Draft Board and Dossier — cutting it (cut ladder #1) never
-drops a screen.
-
-## 9. Seed-data curation plan (week-1 task, capped)
-
-- Candidates (curator verifies current rosters/events before entry): G2 Gozen, Cloud9 GC,
-  Sentinels GC, Team Liquid GC, 100 Thieves GC, NRG GC, Shopify GC, MIBR GC, FURIA GC,
-  KRÜ GC, LEV GC, MIND GC → pick **10–12**.
-- Depth targets (machine-checked by `scripts/check_seed.py`): 10–12 teams; ≥70 players
-  (5–7/team); every team 6–10 pool entries with tier+pick_rate; ≥6 results/team (real GC
-  events, hand-entered public facts); 24–26 agents; 7 maps; **≥200 matrix edges** each with
-  confidence + non-empty note; agent_map coverage for all agents×maps; 5 default weights.
-- Source posture: hand-entered public knowledge; no scraping, no third-party IP in repo;
-  factual names only; no logos (text tags); valorant-api.com static fetch at build time.
-- CSVs in `app/backend/app/db/seed/` → `scripts/load_seed.py` → `gcradar.db`. DataGrip opens
-  the db directly (JetBrains evidence). Analyzer is data-independent: golden tests use
-  in-memory fixtures, so curation depth never blocks the tech core.
-
-## 10. Testing strategy
-
-Backend: pytest only (golden analyzer fixtures, seed integrity, API via `fastapi.TestClient`,
-LLM via MockTransport). Frontend: vitest on pure helpers + `tsc && vite build` as contract
-check. No browser-in-agent tests; browser verification is orchestrator-gate only.
-
-## 11. Repo layout
-
-```
-app/backend/  app/{main,config}.py app/db/{schema.sql,seed/*.csv} app/analyzer/ app/services/
-              app/routers/ scripts/{load_seed,check_seed,fetch_static}.py data/ tests/
-app/frontend/ src/{main,App,routes}.tsx src/api/ src/pages/ src/components/ src/fixtures/
-              package.json vite.config.ts (port 8402, proxy /api→8401)
-.idea/ .junie/ LICENSE README.md            (committed from first commit — Stage One evidence)
-```
+- Sim is pure; `loop.ts` feeds it Frames from input at fixed dt=1/60 with an
+  accumulator (max 5 catch-up steps, then drop). Same input stream -> identical
+  state at every tick (float ops are IEEE-deterministic in one engine; no
+  Math.random in core — grep-enforced by a vitest source scan).
+- **Golden traces** (`src/core/__tests__/`): hand-written frame sequences with
+  hand-computed expected snapshots: gaunt7_survive, gaunt7_death_moving,
+  murmur10_beam_walk, murmur10_oil_out_death, tally5_fake_door_death,
+  cinder9_relight_order, checkpoint_respawn, finale24. Assert exact fields
+  (alive, door, oil band, entity phase) — not full float equality on positions.
+- Backend: TestClient tests for scores validation + flavor offline degrade.
+- Browser checks are orchestrator-gate only (no Playwright in build tasks).

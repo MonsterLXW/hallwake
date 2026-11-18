@@ -1,171 +1,138 @@
 {
-  "project": "gcradar",
+  "project": "hallwake",
   "generated": "2026-11-18",
-  "notes": "Waves are derivable from deps (wave = 1 + max(dep waves)). Files within a wave are disjoint. T5 replaces the llm.py stub T2 creates (sequential, deps enforce order). All verify steps are headless: pytest / TestClient / npm build+vitest. Browser checks are orchestrator-gate only.",
+  "notes": "Phase 5 REWRITE (replaces GCRadar tasks). Waves derivable from deps (wave = 1 + max(dep waves)): W1 {T1,T5,T6,T7} W2 {T2} W3 {T3,T4}. File lists disjoint except where a later task REPLACES an earlier stub (T4 replaces T2's Hud.tsx/uiStore.ts placeholders; deps enforce order). Operator constraint: ONE agent at a time — waves give scheduling flexibility, not parallel dispatch. All verifies headless (vitest/TestClient/npm build); browser/perf-fps checks are orchestrator-gate only. Backend keeps the existing FLAT layout (app/backend/main.py at root).",
   "tasks": [
     {
       "id": "T1",
-      "title": "SQLite schema + curated seed dataset + loader/integrity checks",
-      "role": "database",
-      "deps": [],
-      "files": [
-        "app/backend/app/db/schema.sql",
-        "app/backend/app/db/seed/teams.csv",
-        "app/backend/app/db/seed/players.csv",
-        "app/backend/app/db/seed/agents.csv",
-        "app/backend/app/db/seed/maps.csv",
-        "app/backend/app/db/seed/agent_pools.csv",
-        "app/backend/app/db/seed/agent_map.csv",
-        "app/backend/app/db/seed/results.csv",
-        "app/backend/app/db/seed/matrix_edges.csv",
-        "app/backend/app/db/seed/weights.csv",
-        "app/backend/app/db/seed/archetypes.csv",
-        "app/backend/app/db/seed/archetype_agents.csv",
-        "app/backend/scripts/load_seed.py",
-        "app/backend/scripts/check_seed.py",
-        "app/backend/tests/test_seed.py"
-      ],
-      "spec": "Create schema.sql EXACTLY as the DDL in plan/architecture.md section 3. Author seed CSVs (header row, columns match table): 10-12 GC teams from the candidate list in section 9 (verify current rosters before entry), 5-7 players/team, 6-10 agent_pools rows/team with tier+pick_rate, >=6 results/team from real GC events (hand-entered public facts), 24-26 agents with roles, 7 maps, >=200 matrix_edges each with score in [-1,1], confidence in [0,1] and NON-EMPTY note, agent_map rows for every agent x map, 5 weights rows (role,synergy,counter,map,threat; defaults 1.0,1.0,1.0,0.6,0.8), 3-4 archetypes. load_seed.py: deletes+recreates data/gcradar.db from schema.sql, bulk-inserts all CSVs, exits 0. check_seed.py: asserts counts (teams 10-12, players>=70, edges>=200, every edge note non-empty, every team >=6 results, agent_map covers all agents x 7 maps) and PRAGMA foreign_key_check is empty; exits nonzero with a printed table on failure. No network at runtime.",
-      "verify": "cd app/backend && python scripts/load_seed.py && python scripts/check_seed.py && python -m pytest tests/test_seed.py -q  (all exit 0)"
-    },
-    {
-      "id": "T2",
-      "title": "FastAPI core: app factory, config, db connection, health, catalog routes, static fetch",
-      "role": "backend",
-      "deps": ["T1"],
-      "files": [
-        "app/backend/app/main.py",
-        "app/backend/app/config.py",
-        "app/backend/app/db/connection.py",
-        "app/backend/app/routers/__init__.py",
-        "app/backend/app/routers/system.py",
-        "app/backend/app/routers/catalog.py",
-        "app/backend/app/services/__init__.py",
-        "app/backend/app/services/llm.py",
-        "app/backend/scripts/fetch_static.py",
-        "app/backend/requirements.txt",
-        "app/backend/pytest.ini",
-        "app/backend/tests/conftest.py",
-        "app/backend/tests/test_system.py",
-        "app/backend/tests/test_catalog.py"
-      ],
-      "spec": "config.py: env GCRADAR_DB (default app/backend/data/gcradar.db), GCRADAR_LLM_URL (default http://100.124.134.63:8890/v1), GCRADAR_LLM_MODEL (default qwen3.8-flash-next), port 8401. connection.py: get_conn() stdlib sqlite3 with row_factory=sqlite3.Row, foreign_keys ON. main.py: create_app() factory, CORS allow http://localhost:8402, include routers, uvicorn entry on 8401. system.py: GET /api/health -> {status:'ok', llm:{online,model,checked_at}} using llm.probe(). catalog.py: GET /api/agents, GET /api/maps from tables. services/llm.py STUB (T5 replaces it): probe()->dict returns {'online':False,'model':config model,'checked_at':iso} and a raise NotImplementedError for complete(); keeps app LLM-offline by default. fetch_static.py: one-time build-time script (NOT imported by app) fetching https://valorant-api.com/v1/agents?language=en-US and /v1/maps, writing ONLY {code,name,role} / {code,name} to data/static/agents.json + maps.json; strip every asset URL; document that CSVs are generated from these by hand. requirements.txt: fastapi, uvicorn, httpx, pydantic, pytest. conftest.py: TestClient fixture over a temp db built from T1 schema+seed. Tests: health shape, agents count>=24, maps count=7.",
-      "verify": "cd app/backend && python -m pytest tests/test_system.py tests/test_catalog.py -q && python -c \"from app.main import create_app; assert create_app()\""
-    },
-    {
-      "id": "T3",
-      "title": "Deterministic analyzer: draft state machine + matrix scoring + matchup-conditioned ranking (TDD)",
-      "role": "backend",
-      "deps": [],
-      "files": [
-        "app/backend/app/analyzer/__init__.py",
-        "app/backend/app/analyzer/types.py",
-        "app/backend/app/analyzer/draft.py",
-        "app/backend/app/analyzer/matrix.py",
-        "app/backend/app/analyzer/roles.py",
-        "app/backend/app/analyzer/ranking.py",
-        "app/backend/tests/golden/fixture_small.json",
-        "app/backend/tests/golden/fixture_counter.json",
-        "app/backend/tests/golden/fixture_draft_flow.json",
-        "app/backend/tests/test_draft.py",
-        "app/backend/tests/test_matrix.py",
-        "app/backend/tests/test_ranking.py"
-      ],
-      "spec": "Implement plan/architecture.md section 4 EXACTLY: pure functions, no I/O, no DB imports. types.py dataclasses Edge/AgentMeta/PoolEntry/Weights/Action/DraftState. draft.py: PHASE_SCRIPT constant (side A; bans B,A,B,A,B,A; picks A,B,B,A,A,B,B,A; bans B,A; picks B,A), replay(actions)->DraftState with legality errors per section 4.1. matrix.py/roles.py: role_coverage, synergy, counter_vs, map_fit, threat with the exact formulas and ranges of section 4.2; comp_score with normalized terms and echoed weights. ranking.py: counter_pick_ranking top-5 with reason chains (top-3 contributing edges with confidence+note, threat fact, role_need fact). WRITE GOLDEN FIXTURES FIRST with hand-computed expected values (comp_score to 4 decimal places; fixture_draft_flow has one full legal 18-action draft and 4 illegal-action cases: wrong turn, re-pick, banned-then-picked, post-complete action), then code until pytest passes. Zero network, zero DB.",
-      "verify": "cd app/backend && python -m pytest tests/test_draft.py tests/test_matrix.py tests/test_ranking.py -q  (green against hand-computed golden fixtures)"
-    },
-    {
-      "id": "T4",
-      "title": "API wiring: store loader + teams/matchup/draft/comp/weights/matrix endpoints",
-      "role": "backend",
-      "deps": ["T1", "T2", "T3"],
-      "files": [
-        "app/backend/app/services/store.py",
-        "app/backend/app/routers/teams.py",
-        "app/backend/app/routers/matchup.py",
-        "app/backend/app/routers/draft.py",
-        "app/backend/app/routers/comp.py",
-        "app/backend/app/routers/weights.py",
-        "app/backend/app/routers/matrix.py",
-        "app/backend/tests/test_api_teams.py",
-        "app/backend/tests/test_api_matchup.py",
-        "app/backend/tests/test_api_draft.py",
-        "app/backend/tests/test_api_comp.py",
-        "app/backend/tests/test_api_weights.py"
-      ],
-      "spec": "store.py: load_edges/load_agents/load_pool/load_weights(db)->analyzer types (T3 types), cached per-connection. Implement the section 5 API contract EXACTLY (paths, request/response shapes): GET /api/teams (with W/L record from results), GET /api/teams/{id}, GET /api/teams/{id}/form, GET /api/matchup?team_a=&team_b= (overlap, ban_pressure via analyzer.threat against opponent pool, role_gaps, matrix_summary), POST /api/draft/score (stateless: body {map_code,team_a_id,team_b_id,actions,weights?}; replay + comp_score both teams + counter_pick_ranking for the next actor AND the other team; weights override defaults when sent; response includes weights_used), GET/PUT /api/weights (PUT validates keys in the 5-key set and values 0..2, persists to weights table), POST /api/comp/analyze, GET /api/matrix?agent=. All numbers come from T3 analyzer only. 404 unknown team ids. Tests via TestClient: teams list shape, matchup overlap correctness on seeded data, full legal draft replay scores >0 and counterpicks have non-empty reasons, illegal action -> legality.ok=false with error string, PUT weights changes a comp_score on the same input (transparency proof).",
-      "verify": "cd app/backend && python -m pytest tests/test_api_teams.py tests/test_api_matchup.py tests/test_api_draft.py tests/test_api_comp.py tests/test_api_weights.py -q"
-    },
-    {
-      "id": "T5",
-      "title": "LLM narration layer: vLLM client, semaphore, JSON schemas, novel-number guard, offline degrade",
-      "role": "ai",
-      "deps": ["T2", "T4"],
-      "files": [
-        "app/backend/app/services/llm.py",
-        "app/backend/app/services/llm_guard.py",
-        "app/backend/app/routers/ai.py",
-        "app/backend/tests/test_llm_guard.py",
-        "app/backend/tests/test_ai.py"
-      ],
-      "spec": "REPLACE the T2 stub llm.py (keep probe() signature so system.py keeps working): httpx.AsyncClient to config GCRADAR_LLM_URL chat/completions, model qwen3.8-flash-next, no key, asyncio.Semaphore(1), timeout 12s, no retry; probe() caches GET /models result 30s. llm_guard.py: novel_numbers_guard(context_json:str, output:str)->list[str] per section 6 (regex numeric tokens; any output number absent from context = reject). ai.py router: POST /api/ai/narrate {kind:dossier|draft|bullets, id} builds context JSON ONLY from T4 deterministic payloads (server-side; client sends no facts), system prompt per section 6, response_format json_object, pydantic-validate output per kind, run guard, then 200 {available:true,text} or 200 {available:false,reason:model_offline|guard_rejected|bad_output}. POST /api/ai/qa {question,scope} same contract with cites:[stat_keys]. NEVER a 5xx when LLM is down; never a number the deterministic layer did not compute. Tests: MockTransport for online/offline/timeout/garbage/guard-hit; assert narrate returns available:false (not 500) in all failure modes; one @pytest.mark.live test hitting real vLLM skipped when unreachable.",
-      "verify": "cd app/backend && python -m pytest tests/test_llm_guard.py tests/test_ai.py -q && python -m pytest tests/test_ai.py -q -m live --co 2>/dev/null; curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8401/api/ai/narrate -H 'content-type: application/json' -d '{\"kind\":\"dossier\",\"id\":1}'  # run backend with GCRADAR_LLM_URL=http://127.0.0.1:9 (dead) -> expect 200"
-    },
-    {
-      "id": "T6",
-      "title": "Frontend scaffold + Hub + Team Dossier + SVG chart kit (contract-driven)",
+      "title": "Deterministic game core: schedule table, sim reducer, 4 entity FSMs, oil, scoring + golden traces",
       "role": "frontend",
       "deps": [],
       "files": [
         "app/frontend/package.json",
         "app/frontend/package-lock.json",
-        "app/frontend/vite.config.ts",
-        "app/frontend/tsconfig.json",
-        "app/frontend/index.html",
-        "app/frontend/src/main.tsx",
-        "app/frontend/src/App.tsx",
-        "app/frontend/src/routes.tsx",
-        "app/frontend/src/api/client.ts",
-        "app/frontend/src/api/types.ts",
-        "app/frontend/src/fixtures/teams.json",
-        "app/frontend/src/fixtures/dossier.json",
-        "app/frontend/src/components/Layout.tsx",
-        "app/frontend/src/components/charts/BarChart.tsx",
-        "app/frontend/src/components/charts/Sparkline.tsx",
-        "app/frontend/src/components/charts/TierGrid.tsx",
-        "app/frontend/src/components/ai/AiPanel.tsx",
-        "app/frontend/src/pages/Hub.tsx",
-        "app/frontend/src/pages/Dossier.tsx",
-        "app/frontend/src/pages/Matchup.tsx",
-        "app/frontend/src/pages/Draft.tsx",
-        "app/frontend/src/pages/CompLab.tsx",
-        "app/frontend/src/styles/tokens.css",
-        "app/frontend/src/styles/app.css",
-        "app/frontend/src/tests/charts.test.ts"
+        "app/frontend/src/core/types.ts",
+        "app/frontend/src/core/schedule.ts",
+        "app/frontend/src/core/sim.ts",
+        "app/frontend/src/core/entities.ts",
+        "app/frontend/src/core/oil.ts",
+        "app/frontend/src/core/scoring.ts",
+        "app/frontend/src/core/__tests__/schedule.test.ts",
+        "app/frontend/src/core/__tests__/sim.test.ts",
+        "app/frontend/src/core/__tests__/entities.test.ts",
+        "app/frontend/src/core/__tests__/traces.ts"
       ],
-      "spec": "Vite + React 18 + TS. vite.config.ts: server.port 8402, proxy /api -> http://localhost:8401. Deps ONLY react, react-dom, react-router-dom (+dev: typescript, vitest, @vitejs/plugin-react). api/types.ts: TS types mirroring the section 5 contract EXACTLY (single source for all frontend tasks). api/client.ts: typed fetch wrappers for every endpoint; AiPanel.tsx: calls /api/ai/narrate, renders text when available:true, renders an explicit 'model offline' placeholder card when available:false (never an error state). routes.tsx: 5 routes per section 8. Matchup.tsx/Draft.tsx/CompLab.tsx are minimal placeholder pages (T7 replaces them). Hub.tsx: team grid from /api/teams with fixtures fallback when API is down (dev mode). Dossier.tsx: roster table, TierGrid (agent x tier), Sparkline form from /api/teams/{id}/form, AiPanel dossier blurb. Hand-rolled SVG charts only (no chart libs); original design tokens in tokens.css (no Riot/team logos, text tags only). charts.test.ts: vitest on pure scale/layout helpers.",
-      "verify": "cd app/frontend && npm install && npm run build && npm test  (tsc clean, vite build ok, vitest green)"
+      "spec": "package.json: add deps three@0.170.0, zustand@^5; devDeps vitest@^2, @types/three@0.170.0; add script \"test\": \"vitest run\". Keep react 19. src/core/ imports NOTHING outside src/core (no three, no DOM, no WebAudio) — enforce with a vitest source-scan test that greps core files for forbidden imports and Math.random. types.ts: SimState {tick,door,roomTick,player:{x,z,yaw,vel},oil,alive,checkpoint,deaths,runMs,doorLog,sconces:boolean[],entities:EntitySnapshot[],events:SimEvent[]}; Frame {mx,mz,yawD,interact}; SimEvent {type:'tell'|'death'|'door_open'|'banish'|'checkpoint'|'finale', entity?:'GAUNT'|'MURMUR'|'TALLY'|'CINDER', door, visible:boolean}; EntitySnapshot {kind,phase:string,dist?:number}. schedule.ts: export the EXACT 24-door table from architecture.md section 4 (door -> {archetype:'junction'|'guest'|'laundry'|'lounge'|'boiler'|'washroom', variant:'A'|'B', event:null|'GAUNT'|'MURMUR'|'TALLY'|'CINDER'|'FINALE', checkpoint:boolean}) plus per-door params: GAUNT alcove index + sweep path waypoints (2 waypoints per GAUNT door, room-local coords), CINDER sconce order {9:[0,1,2],15:[2,0,1],21:[1,2,0],24:[0,2,1]}, MURMUR spawn corner, TALLY fakeNum = expected+2. sim.ts: createInitialState(seed:number) + pure stepSim(state,frame):SimState — fixed dt=1/60, movement 2.2 m/s, per-room AABB collision list (authored in schedule.ts per archetype), door interact (frame.interact near door) advances door & sets doorLog=door+1, checkpoint doors {1,5,9,13,17,21} set checkpoint + emit checkpoint event, death -> alive=false + 90-tick freeze then respawn at checkpoint with oil 0.6 and block re-lock (roomTick reset replays events). oil.ts: drain 1/90 per tick-second lit, x4 during CINDER active, refill +0.35 cap 1 on oil cans/sconces, radius=2+6*oil. entities.ts: the 4 FSMs EXACTLY per architecture.md section 5 (GAUNT tell roomTick 60, sweep 6s @3.5 m/s, alcove+|vel|<0.2 survive; MURMUR 60-tick step, cone 25deg & oil>0.20 frozen, dist<1.5 death; TALLY fake door open = death, real = advance; CINDER blackout 3s/sconce, scratch-order relight, wrong resets, oil 0 -> early GAUNT death; FINALE door 24 concurrent, GAUNT tell roomTick 300). No Math.random anywhere; all variation from schedule.ts tables. scoring.ts: runCard {deepest_door,run_time_ms,deaths} + validateScore mirroring architecture.md section 10 rules (name regex ^[A-Za-z0-9 .'-]{1,12}$, door 1..24, runMs 10000..1800000, deaths 0..99). __tests__: schedule.test asserts the table (24 rows, events at 5,12,18 TALLY / 7,13,19 GAUNT / 9,15,21 CINDER / 10,16,22 MURMUR / 24 FINALE, checkpoints {1,5,9,13,17,21}); traces.ts exports 8 hand-written golden traces with hand-computed expected snapshots (gaunt7_survive, gaunt7_death_moving, murmur10_beam_walk, murmur10_oil_out_death, tally5_fake_door_death, cinder9_relight_order, checkpoint_respawn, finale24_survive) asserting exact {alive,door,oil band (0.05 buckets),entity phase} — WRITE TRACES FIRST, then code until green. sim.test runs every trace twice and asserts identical state (determinism proof).",
+      "verify": "cd app/frontend && npm install && npx vitest run src/core  (all green, exit 0)"
+    },
+    {
+      "id": "T2",
+      "title": "PERF SPIKE + Three.js renderer: room builder, procedural textures, player controller, fixed-timestep loop, budget caps",
+      "role": "frontend",
+      "deps": ["T1"],
+      "files": [
+        "app/frontend/index.html",
+        "app/frontend/src/App.tsx",
+        "app/frontend/src/game/GameShell.tsx",
+        "app/frontend/src/state/uiStore.ts",
+        "app/frontend/src/ui/Hud.tsx",
+        "app/frontend/src/render/scene.ts",
+        "app/frontend/src/render/roomBuilder.ts",
+        "app/frontend/src/render/textures.ts",
+        "app/frontend/src/render/budget.ts",
+        "app/frontend/src/render/quality.ts",
+        "app/frontend/src/render/playerController.ts",
+        "app/frontend/src/render/loop.ts",
+        "app/frontend/src/render/__tests__/budget.test.ts",
+        "app/frontend/src/render/__tests__/textures.test.ts"
+      ],
+      "spec": "PERF SPIKE (week 2, before any polish): greybox 24-door run must hold 60fps on a mid iGPU — measured at orchestrator gate; this task guarantees it structurally via budget.ts. index.html: <title>HALLWAKE</title> (replaces 'HackathonFactory App'). App.tsx: mounts GameShell only. GameShell.tsx: creates canvas + Three scene, runs loop.ts (fixed dt=1/60 accumulator, max 5 catch-up steps then drop), calls stepSim from T1, pushes HUD snapshot to uiStore at 10Hz, exposes ?fps=1 dev meter. uiStore.ts MINIMAL zustand store {phase:'attract'|'playing'|'dead'|'run', hud snapshot, scores} — T4 replaces it. Hud.tsx: placeholder div showing door + oil numbers — T4 replaces it. scene.ts: WebGLRenderer, exponential fog #0a0a0e, PlayerRig camera, ONE SpotLight lantern (distance=2+6*oil), <=2 event PointLights, NO shadow maps anywhere (renderer.shadowMap.enabled=false), CSS vignette overlay div. roomBuilder.ts: 6 archetypes x2 variants from schedule.ts as box/extrude primitive data, merged per room via BufferGeometryUtils.mergeGeometries (StaticMerged + PropsMerged), only current + next room in scene, blob-AO dark discs under props, sconce/alcove emissive quads (emissive material, not lights), door numeral via canvas texture. textures.ts: procedural canvas textures only (wood grain, plaster, noise, wall lightmap gradient, door numerals) 256px props / 512px walls, cached by key, no external files. quality.ts: low/mid/high presets per architecture.md section 7. budget.ts: PURE function scenePlanFromRoom(room)->{drawCalls,dynamicLights,shadowMaps,triangles,textureBytes} — no WebGL. playerController.ts: Pointer Lock API, WASD, mouse look, E interact, Esc releases lock -> uiStore pause; Gamepad API (SHOULD): left stick move, right stick look, A/X interact; both emit the same Frame shape consumed by stepSim. Tests: budget.test asserts caps over ALL 24 rooms x2 variants: drawCalls<=150, dynamicLights<=3, shadowMaps===0, triangles<=120000, textureBytes<=8MB; textures.test asserts texture cache returns identical objects for same key and every texture is generated (no fetch).",
+      "verify": "cd app/frontend && npm run build && npx vitest run src/render  (tsc clean, vite build ok, vitest green)"
+    },
+    {
+      "id": "T3",
+      "title": "Entity visuals + tell FX + WebAudio synth graph",
+      "role": "frontend",
+      "deps": ["T1", "T2"],
+      "files": [
+        "app/frontend/src/render/entities/gaunt.ts",
+        "app/frontend/src/render/entities/murmur.ts",
+        "app/frontend/src/render/entities/tally.ts",
+        "app/frontend/src/render/entities/cinder.ts",
+        "app/frontend/src/render/entities/fx.ts",
+        "app/frontend/src/audio/graph.ts",
+        "app/frontend/src/audio/cues.ts",
+        "app/frontend/src/audio/__tests__/cues.test.ts",
+        "app/frontend/src/render/__tests__/entityMeshes.test.ts"
+      ],
+      "spec": "entityMeshes: pure factories (no scene mutation in tests) building ORIGINAL low-poly silhouettes from primitives — GAUNT: tall stitched silhouette (elongated capsule + stitch line texture), MURMUR: moth-swarm point cluster + face-in-wall decal quad, TALLY: chalk-mark overlay + fake door mesh with numeral texture, CINDER: flame wraith (cone + emissive blue when tell), fx.ts: amber flicker helper (drives lantern + event light intensity from tell events), red numeral glow, blue-flame swap. Each factory returns {group, primitiveCount, update(simSnapshot, t)}; GameShell (T2) instantiates them from EntitySnapshot — do NOT edit GameShell; export a single mountEntities(scene, core) helper in fx.ts that T2's loop already can call via the events channel (fx.ts subscribes to SimEvents). Audio: graph.ts builds masterGain->DynamicsCompressor->destination + buses exactly per architecture.md section 8 (ambience brown-noise+55Hz sine, door thud, gaunt slam+hum, murmur whisper gain=facing dot, tally scratch+ping, cinder hiss+relight chime); AudioContext created lazily on first user input; NO audio files, everything OscillatorNode/noise buffers. cues.ts: PURE map SimEvent.type -> synth recipe (osc type, freq envelope, gain envelope) — no WebAudio imports in cues.ts. Tests: cues.test asserts every SimEvent type in T1's union has a recipe and recipes are serializable data; entityMeshes.test asserts each factory's primitiveCount within budget (<=12 primitives per entity) and group has no lights (lights come from scene budget only).",
+      "verify": "cd app/frontend && npm run build && npx vitest run src/audio src/render  (green)"
+    },
+    {
+      "id": "T4",
+      "title": "HUD + kiosk screens + net clients (flavor/scores with canned fallbacks, localStorage mirror)",
+      "role": "frontend",
+      "deps": ["T1", "T2"],
+      "files": [
+        "app/frontend/vite.config.ts",
+        "app/frontend/src/state/uiStore.ts",
+        "app/frontend/src/ui/Hud.tsx",
+        "app/frontend/src/ui/AttractScreen.tsx",
+        "app/frontend/src/ui/DeathCard.tsx",
+        "app/frontend/src/ui/RunCard.tsx",
+        "app/frontend/src/ui/Leaderboard.tsx",
+        "app/frontend/src/ui/NameEntry.tsx",
+        "app/frontend/src/ui/LoreCard.tsx",
+        "app/frontend/src/net/flavorClient.ts",
+        "app/frontend/src/net/scoresClient.ts",
+        "app/frontend/src/net/canned.ts",
+        "app/frontend/src/ui/__tests__/canned.test.ts",
+        "app/frontend/src/ui/__tests__/validation.test.ts",
+        "app/frontend/src/net/__tests__/clients.test.ts"
+      ],
+      "spec": "REPLACE T2's placeholder uiStore.ts and Hud.tsx (sequential, deps enforce). uiStore.ts: zustand {phase:'attract'|'playing'|'paused'|'dead'|'run', hud:{door,doorLog,oil,tellKind,interactPrompt}, runCard, scores, flavorText} + actions; attract auto-returns after 30s idle (kiosk reset). Hud.tsx: big door numeral, DOOR LOG ('next: N' — the TALLY counterplay surface), oil gauge amber->red under 0.20, tell indicator, interact prompt; all reads uiStore only. AttractScreen: title HALLWAKE + manifesto line + 'press any key / gamepad' + last-5 leaderboard; any key/gamepad button -> phase playing. DeathCard: 1.5s freeze overlay + epitaph line (flavorClient, fallback canned). RunCard: deepest door, time, deaths + 'submit name' -> NameEntry (input validated by core/scoring.ts validateScore client-side) -> scoresClient POST -> Leaderboard screen (GET /api/scores, falls back to localStorage mirror). LoreCard: safe-room flavor on door entry (kind 'lore'), 4s auto-dismiss. flavorClient.ts: POST /api/flavor with AbortController 800ms; on ANY failure use canned.ts; renders via textContent ONLY (never innerHTML, never parsed into game state). canned.ts: >=30 hand-authored lines per kind (lore/epitaph/run), chosen by (kind,door)%len — deterministic, first-class content. scoresClient.ts: GET/POST /api/scores per architecture.md section 10 shapes; on failure read/write localStorage 'hallwake.scores.local' (last 20) so kiosk works backend-down. vite.config.ts: proxy /api -> http://127.0.0.1:8401 (fixes scaffold's 8201), server.port 8402. Tests: canned.test asserts >=30 lines/kind and deterministic pick; validation.test asserts validateScore accepts/rejects per section 10 (13-char name reject, door 25 reject, runMs 9999 reject); clients.test mocks fetch (vi.stubGlobal) asserting 800ms abort -> canned, POST fail -> localStorage write, flavor text never reaches stepSim (grep test: no import of core/sim in src/net).",
+      "verify": "cd app/frontend && npm run build && npx vitest run src/ui src/net && grep -q HALLWAKE index.html  (all exit 0)"
+    },
+    {
+      "id": "T5",
+      "title": "FastAPI leaderboard: SQLite schema, /api/scores with server validation, health, CORS",
+      "role": "backend",
+      "deps": [],
+      "files": [
+        "app/backend/main.py",
+        "app/backend/db.py",
+        "app/backend/routers/scores.py",
+        "app/backend/tests/test_scores.py",
+        "app/backend/pytest.ini"
+      ],
+      "spec": "Keep FLAT scaffold layout (main.py at app/backend root; tests import 'from main import app'). main.py REWRITE: FastAPI(title='HALLWAKE'), CORS allow_origins ['http://localhost:8402','http://127.0.0.1:8402'], include routers/scores.py always; include routers/flavor.py via try/except ImportError (T6 lands it independently — do NOT create that file). GET /health -> {status:'ok', llm:{online:false, model:llm.MODEL}} (llm probe optional, never 5xx). db.py: DB_PATH env HALLWAKE_DB default data/hallwake.db; init_db() executes architecture.md section 9 DDL VERBATIM (scores table + idx_scores_rank); insert_score(name,deepest_door,run_time_ms,deaths,seed)->(id,rank) where rank = 1 + count of rows ranking better by (deepest_door DESC, run_time_ms ASC, deaths ASC); list_scores(limit) ordered by rank; stdlib sqlite3, row_factory=Row, foreign_keys ON, created_at ISO-8601 UTC. routers/scores.py: GET /api/scores?limit=10 (clamp 1..50) -> {scores:[{id,name,deepest_door,run_time_ms,deaths,created_at}]}; POST /api/scores body {name,deepest_door,run_time_ms,deaths,seed} -> 201 {ok:true,id,rank}; validation server-side EXACTLY: name ^[A-Za-z0-9 .'-]{1,12}$, deepest_door int 1..24, run_time_ms int 10000..1800000, deaths int 0..99, seed int; invalid -> 422 {ok:false,error}; unknown extra fields ignored, never 5xx. pytest.ini: testpaths=tests. Tests (TestClient, temp DB via HALLWAKE_DB env + init_db): insert+list roundtrip, rank correctness (better door ranks above; same door faster time ranks above), 422 on each invalid field (13-char name, door 25, runMs 9999, deaths 100, bad name chars), limit clamp, health shape, existing tests/test_health.py still passes.",
+      "verify": "cd app/backend && python -m pytest tests/test_scores.py tests/test_health.py -q  (green, exit 0)"
+    },
+    {
+      "id": "T6",
+      "title": "LLM flavor firewall: /api/flavor proxy (0.8s timeout, no retry), canned pools, offline degrade",
+      "role": "ai",
+      "deps": [],
+      "files": [
+        "app/backend/llm.py",
+        "app/backend/routers/flavor.py",
+        "app/backend/canned.py",
+        "app/backend/tests/test_flavor.py"
+      ],
+      "spec": "REPLACE scaffold llm.py: httpx (already in requirements.txt) — async chat(messages, max_tokens=80, temperature=0.8, timeout=0.8) to env HF_LLM_URL (default http://100.124.134.63:8890/v1) /chat/completions, model env HF_LLM_MODEL (default qwen3.8-flash-next), NO key, NO retries, asyncio.Semaphore(1); keep module constants URL, MODEL (main.py/health import MODEL) and add probe()->bool with 30s cache (GET /models). routers/flavor.py: POST /api/flavor {kind:'lore'|'epitaph'|'run', door:int 1..24, entity?:str, deaths?:int 0..99} -> ALWAYS 200 {available:bool, source:'llm'|'canned', text:str}. Server builds prompt ONLY from request fields (client sends no facts beyond these); system prompt per kind (lore: eerie one-liner for door/archetype/entity; epitaph: dark-humor consolation, <=240 chars; run: taunt/praise by door/time/deaths). Sanitize LLM output: strip control chars + HTML tags, collapse whitespace to one line, truncate 240; empty/garbage/timeout/offline -> canned. canned.py: >=30 hand-authored lines per kind (90+ total, original horror flavor, NO banned terms per scripts/ip-check.sh), pick index (kind,door)%len — deterministic. NEVER 5xx on LLM failure. Tests (TestClient, monkeypatch httpx): online-ok returns source llm with sanitized text (inject fake response with HTML + 300 chars -> assert stripped/truncated), timeout (httpx.TimeoutException) -> 200 source canned, connection error -> 200 canned, empty content -> canned, invalid kind/door -> 422, canned pick deterministic across calls, assert no 'requests' import remains in llm.py.",
+      "verify": "cd app/backend && python -m pytest tests/test_flavor.py -q  (green, exit 0)"
     },
     {
       "id": "T7",
-      "title": "Frontend Matchup + Draft Board + Comp Lab + Explain/Weights panel",
-      "role": "frontend",
-      "deps": ["T6"],
+      "title": "IP safety gate: scripts/ip-check.sh + CI workflow",
+      "role": "backend",
+      "deps": [],
       "files": [
-        "app/frontend/src/pages/Matchup.tsx",
-        "app/frontend/src/pages/Draft.tsx",
-        "app/frontend/src/pages/CompLab.tsx",
-        "app/frontend/src/components/draft/PickBanBoard.tsx",
-        "app/frontend/src/components/draft/ScoreBar.tsx",
-        "app/frontend/src/components/draft/ReasonChain.tsx",
-        "app/frontend/src/components/weights/ExplainPanel.tsx",
-        "app/frontend/src/components/matchup/OverlapView.tsx",
-        "app/frontend/src/components/matchup/BanPressure.tsx",
-        "app/frontend/src/tests/draftBoard.test.ts",
-        "app/frontend/src/tests/explain.test.ts"
+        "scripts/ip-check.sh",
+        ".github/workflows/ci.yml"
       ],
-      "spec": "Server contract consumed ONLY via T6's src/api/types.ts (T4's section 5 shapes); live integration is verified at the orchestrator gate, not by this task. REPLACE the three T6 placeholder pages (keep routes.tsx untouched). Matchup.tsx: two team pickers -> GET /api/matchup; OverlapView (shared agents with tier badges), BanPressure (threat-sorted bars with reason text), role-gap chips. Draft.tsx: team/map/side setup -> local action list (client appends side/ban/pick actions, sends FULL list to POST /api/draft/score each click, renders returned state/legality/scores/counterpicks; illegal action shows server error string and reverts the click); PickBanBoard renders 8 ban slots + 10 pick slots from PHASE order in the response; ScoreBar shows comp_score breakdown per team; ReasonChain renders RankedPick reasons with confidence bars; AiPanel draft-rationale panel (offline-safe). ExplainPanel.tsx: sliders for the 5 weights (0..2) -> PUT /api/weights and re-scores live; shows weights_used echoed by server (the transparency demo beat). CompLab.tsx: 5 agent pickers + map + optional opponent -> POST /api/comp/analyze breakdown + archetype tags when present. draftBoard.test.ts: vitest on the pure action-list builder/phase-advance helper (no DOM browser); explain.test.ts: weight->requery logic.",
-      "verify": "cd app/frontend && npm run build && npm test  (tsc clean, vite build ok, vitest green)"
+      "spec": "scripts/ip-check.sh per architecture.md section 12 EXACTLY: scan roots app/ scripts/ .github/ README*; exclude node_modules dist .venv .git data plan research; case-insensitive whole-word grep -rnwI for roblox lsplash rococo screech stonk amity dupe; case-sensitive whole-word grep -rnwI for DOORS Rush Figure Halt Glitch Jeff Eyes Blink; print file:line:match per hit; exit 1 on any hit else 0. --selftest: mktemp dir with a file containing 'Roblox' -> scan must exit 1; then full repo scan must exit 0; both required for exit 0. POSIX sh, no bashisms beyond [[ not allowed (use [ ]), works under Git Bash on Windows. .github/workflows/ci.yml: on push/PR, jobs: (1) frontend: actions/checkout, actions/setup-node node 20, working-directory app/frontend, npm ci, npm run build, npx vitest run; (2) backend: setup-python 3.12, pip install -r app/backend/requirements.txt, pytest app/backend/tests -q (run from app/backend); (3) ip: bash scripts/ip-check.sh --selftest. No secrets, no paid services.",
+      "verify": "bash scripts/ip-check.sh --selftest  (exit 0: selftest hit detected AND repo clean)"
     }
   ]
 }
