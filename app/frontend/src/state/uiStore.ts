@@ -1,30 +1,106 @@
-// HALLWAKE — minimal zustand UI store (T2 greybox). Carries the kiosk phase,
-// the 10Hz HUD snapshot pushed by loop.ts, and a pause flag set when pointer
-// lock is released. T4 replaces this file with the full kiosk store; keep
-// the field names stable for that swap.
+// HALLWAKE — the kiosk store (T4; replaces the T2 greybox). zustand holds
+// the phase machine (attract -> playing -> paused/dead/run -> attract),
+// the 10 Hz HUD snapshot pushed by loop.ts, the run card, the leaderboard
+// rows, and the display-only flavor lines. The sim never reads this store;
+// the loop writes snapshots one way. Kiosk contract: 30 s of no input
+// returns the booth to attract and the next input starts a fresh run.
 
 import { create } from 'zustand';
-import type { EntityKind } from '../core/types';
-import type { HudSnapshot, RunPhase } from '../render/loop';
+import type { HudSnapshot } from '../render/loop';
+import type { RunCard } from '../core/scoring';
+import type { ScoreRow } from '../net/scoresClient';
 
-export type Phase = 'attract' | RunPhase;
+export type Phase = 'attract' | 'playing' | 'paused' | 'dead' | 'run';
+
+// Safe rooms carrying lore (architecture.md §4: doors 3, 11, 20).
+export const LORE_DOORS: ReadonlySet<number> = new Set([3, 11, 20]);
+
+const IDLE_MS = 30_000; // kiosk auto-reset to attract (brief §6)
+const LORE_MS = 4_000; // LoreCard auto-dismiss (T4 spec)
+
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+let loreTimer: ReturnType<typeof setTimeout> | null = null;
 
 export interface UIState {
   phase: Phase;
-  paused: boolean;
   hud: HudSnapshot;
-  scores: unknown[]; // T4 fills the leaderboard
+  runCard: RunCard | null;
+  scores: ScoreRow[];
+  scoresSource: 'server' | 'local';
+  flavorText: string | null; // LoreCard line
+  epitaph: string | null; // DeathCard line
+  runFlavor: string | null; // RunCard line
+  seed: number; // run id for the leaderboard POST
   setPhase(p: Phase): void;
-  setPaused(v: boolean): void;
   setHud(h: HudSnapshot): void;
+  setRunCard(c: RunCard | null): void;
+  setScores(rows: ScoreRow[], source: 'server' | 'local'): void;
+  setLore(text: string): void;
+  setEpitaph(text: string | null): void;
+  setRunFlavor(text: string | null): void;
+  setSeed(n: number): void;
+  markActivity(): void;
 }
 
-export const useUIStore = create<UIState>((set) => ({
+const INITIAL_HUD: HudSnapshot = {
+  door: 1,
+  doorLog: 2,
+  oil: 1,
+  alive: true,
+  tellKind: null,
+  interactPrompt: null,
+  checkpoint: 1,
+  deaths: 0,
+  runMs: 0,
+  deepest: 1,
+};
+
+export const useUIStore = create<UIState>((set, get) => ({
   phase: 'attract',
-  paused: false,
-  hud: { door: 1, doorLog: 2, oil: 1, alive: true, tellKind: null },
+  hud: INITIAL_HUD,
+  runCard: null,
   scores: [],
-  setPhase: (p) => set((s) => (s.phase === p ? s : { phase: p })),
-  setPaused: (v) => set((s) => (s.paused === v ? s : { paused: v })),
+  scoresSource: 'local',
+  flavorText: null,
+  epitaph: null,
+  runFlavor: null,
+  seed: 0,
+
+  setPhase: (p) => {
+    if (get().phase === p) return;
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+    if (p === 'attract') {
+      if (loreTimer) {
+        clearTimeout(loreTimer);
+        loreTimer = null;
+      }
+      // attract wipes the run: the booth forgets everything but the ledger
+      set({ phase: p, runCard: null, flavorText: null, epitaph: null, runFlavor: null });
+    } else {
+      set({ phase: p });
+    }
+  },
+
   setHud: (h) => set({ hud: h }),
+  setRunCard: (c) => set({ runCard: c }),
+  setScores: (rows, source) => set({ scores: rows, scoresSource: source }),
+
+  setLore: (text) => {
+    if (loreTimer) clearTimeout(loreTimer);
+    set({ flavorText: text });
+    loreTimer = setTimeout(() => set({ flavorText: null }), LORE_MS);
+  },
+
+  setEpitaph: (text) => set({ epitaph: text }),
+  setRunFlavor: (text) => set({ runFlavor: text }),
+  setSeed: (n) => set({ seed: n }),
+
+  markActivity: () => {
+    if (get().phase === 'attract') return;
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => useUIStore.getState().setPhase('attract'), IDLE_MS);
+  },
 }));

@@ -1,14 +1,26 @@
+/* HALLWAKE global base — tokens.css is the single design source; this file
+   only wires the document to it (dark-only by decision, brief §2). */
 * {
   box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
 }
 body {
   margin: 0;
   background: var(--color-bg);
-  color: var(--color-fg);
-  font-family: var(--font-body);
-  line-height: 1.5;
+  color: var(--color-ink);
+  font-family: var(--font-mono);
+  line-height: var(--leading-ui);
 }
 :focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: var(--border-focus);
+  outline-offset: 2px;
+}
+button:focus-visible,
+input:focus-visible {
+  outline: var(--border-focus);
   outline-offset: 2px;
 }

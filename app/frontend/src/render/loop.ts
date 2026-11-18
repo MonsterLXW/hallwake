@@ -6,11 +6,19 @@
 // the orchestrator's browser perf gate can measure a real full-corridor run.
 
 import { createInitialState, stepSim } from '../core/sim';
-import { archetypeGeom, doorDef, sconcePositions } from '../core/schedule';
+import {
+  EXIT_DOOR,
+  INTERACT_RANGE,
+  archetypeGeom,
+  doorDef,
+  sconcePositions,
+} from '../core/schedule';
 import type { Archetype } from '../core/schedule';
 import type { EntityKind, Frame, SimEvent, SimState } from '../core/types';
 import type { SceneBundle } from './scene';
 import type { PlayerController } from './playerController';
+import { mountEntities } from './entities/fx';
+import { createAudioGraph } from '../audio/graph';
 
 export const DT = 1 / 60;
 export const MAX_CATCHUP_STEPS = 5;
@@ -21,6 +29,11 @@ export interface HudSnapshot {
   oil: number;
   alive: boolean;
   tellKind: EntityKind | null;
+  interactPrompt: string | null; // '[E] OPEN 06' surface text, in range only
+  checkpoint: number;
+  deaths: number;
+  runMs: number;
+  deepest: number;
 }
 
 export type RunPhase = 'playing' | 'dead' | 'run';
@@ -33,12 +46,43 @@ export interface LoopDeps {
   isPaused(): boolean;
   onHud(h: HudSnapshot): void;
   onPhase(p: RunPhase): void;
+  /** T4: every SimEvent is also streamed to the shell (lore/epitaph hooks). */
+  onEvent?(ev: SimEvent): void;
 }
 
 export interface LoopHandle {
   stop(): void;
   fps(): number;
   state(): SimState;
+  /** Kiosk reset: fresh sim at door 1 with a new run id, scene untouched. */
+  reset(seed: number): void;
+  /** Gamepad begins never fire key/pointer listeners: wake the graph here. */
+  wakeAudio(): void;
+}
+
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+
+// The interact prompt is derived from sim state only (the HUD never guesses):
+// exit door in range -> OPEN nn, blackout sconce in range -> RELIGHT,
+// unused oil can in range -> OIL CAN.
+function promptFor(sim: SimState): string | null {
+  if (!sim.alive || sim.finished) return null;
+  const def = doorDef(sim.door);
+  const p = sim.player;
+  if (sim.door < 24 && Math.hypot(p.x - EXIT_DOOR.x, p.z - EXIT_DOOR.z) <= INTERACT_RANGE) {
+    return `OPEN ${pad2(sim.doorLog)}`;
+  }
+  const cinder = sim.entities.find((e) => e.kind === 'CINDER');
+  if (cinder && cinder.phase === 'BLACKOUT' && def.cinderOrder) {
+    for (const sc of sconcePositions(def)) {
+      if (Math.hypot(p.x - sc.x, p.z - sc.z) <= INTERACT_RANGE) return 'RELIGHT';
+    }
+  }
+  if (!sim.oilCanUsed) {
+    const can = archetypeGeom(def.archetype).oilCan;
+    if (Math.hypot(p.x - can.x, p.z - can.z) <= INTERACT_RANGE) return 'OIL CAN';
+  }
+  return null;
 }
 
 const clamp1 = (v: number): number => (v < -1 ? -1 : v > 1 ? 1 : v);
@@ -124,6 +168,15 @@ export function startLoop(deps: LoopDeps): LoopHandle {
   const autopilot = deps.autopilot ? createAutopilot() : null;
   const events: SimEvent[] = [];
 
+  // T3 integration (handoff): the entity host keeps EntityGroup in sync with
+  // the sim and owns the SimEvent -> audio dispatch; the graph arms its
+  // AudioContext lazily on first user input (kiosk keypress resumes it).
+  const reducedMotion =
+    typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const audio = createAudioGraph();
+  audio.arm();
+  const entityHost = mountEntities(deps.scene.entityHost, { audio, reducedMotion });
+
   let acc = 0;
   let last = typeof performance !== 'undefined' ? performance.now() : Date.now();
   let hudAt = 0;
@@ -132,6 +185,7 @@ export function startLoop(deps: LoopDeps): LoopHandle {
   let fps = 0;
   let raf = 0;
   let stopped = false;
+  let walkDist = 0; // footstep cadence: one thud per ~1.35 m walked
 
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -167,7 +221,19 @@ export function startLoop(deps: LoopDeps): LoopHandle {
     }
 
     deps.scene.update(sim, events, t / 1000);
+    entityHost.update(sim, events, t / 1000); // meshes + audio dispatch (T3)
+    if (deps.onEvent) for (const e of events) deps.onEvent(e);
     events.length = 0;
+
+    // footstep thuds on the door bus, cadence from walked distance
+    if (sim.alive && !deps.isPaused()) {
+      const speed = Math.hypot(sim.player.vel.x, sim.player.vel.z);
+      walkDist += speed * dt;
+      if (walkDist >= 1.35) {
+        walkDist = 0;
+        audio.footstep(0.3 + 0.4 * (speed / 2.2));
+      }
+    }
 
     if (t - hudAt >= 100) {
       hudAt = t;
@@ -184,6 +250,11 @@ export function startLoop(deps: LoopDeps): LoopHandle {
         oil: sim.oil,
         alive: sim.alive,
         tellKind,
+        interactPrompt: promptFor(sim),
+        checkpoint: sim.checkpoint,
+        deaths: sim.deaths,
+        runMs: sim.runMs,
+        deepest: sim.deepest,
       });
     }
     deps.onPhase(sim.finished ? 'run' : sim.alive ? 'playing' : 'dead');
@@ -194,8 +265,18 @@ export function startLoop(deps: LoopDeps): LoopHandle {
     stop(): void {
       stopped = true;
       cancelAnimationFrame(raf);
+      entityHost.dispose();
+      audio.dispose();
     },
     fps: () => fps,
     state: () => sim,
+    reset(seed: number): void {
+      sim = createInitialState(seed);
+      acc = 0;
+      walkDist = 0;
+    },
+    wakeAudio(): void {
+      if (audio.ensure()) audio.startAmbience();
+    },
   };
 }
