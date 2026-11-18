@@ -116,7 +116,7 @@ export default function AttractScreen({ onBegin }: { onBegin(): void }) {
             inset: 0,
             width: '34%',
             background:
-              'radial-gradient(closest-side, rgba(227,215,188,0.16), rgba(227,215,188,0.05) 60%, transparent 75%)',
+              'radial-gradient(closest-side, var(--sweep-glow), var(--sweep-glow-mid) 60%, transparent 75%)',
             left: reduced ? '0%' : undefined,
             animation: reduced ? undefined : 'hw-sweep var(--motion-sweep) linear infinite',
             pointerEvents: 'none',

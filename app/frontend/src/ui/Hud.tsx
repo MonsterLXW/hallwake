@@ -226,8 +226,8 @@ export default function Hud() {
         }}
         aria-hidden="true"
       >
-        <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: '1px', background: 'rgba(237,231,218,0.35)' }} />
-        <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: '1px', background: 'rgba(237,231,218,0.35)' }} />
+        <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: '1px', background: 'var(--crosshair-ink)' }} />
+        <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: '1px', background: 'var(--crosshair-ink)' }} />
       </div>
 
       {hud.tellKind && (

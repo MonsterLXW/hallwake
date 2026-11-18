@@ -72,6 +72,13 @@
   --color-accent-wash:   rgba(227, 215, 188, 0.10); /* hover/selected wash */
   --color-focus:         #E3D7BC;  /* 2px outline, offset 2px, everywhere */
 
+  /* ---- Alpha usages of token colors — single source; the DOM UI layer
+     never inlines rgba() (QA slop gate: ui/__tests__/designTokens.test.ts) ---- */
+  --crosshair-ink:       rgba(237, 231, 218, 0.35); /* HUD crosshair hairlines (bone @35%) */
+  --sweep-glow:          rgba(227, 215, 188, 0.16); /* attract lantern sweep core */
+  --sweep-glow-mid:      rgba(227, 215, 188, 0.05); /* attract lantern sweep falloff */
+  --death-veil:          rgba(10, 10, 14, 0.55);    /* death card vignette core (bg @55%) */
+
   /* ---- Type: three voices, strict roles (brief §4) ---- */
   --font-display: "Big Shoulders Display", "Arial Narrow", system-ui, sans-serif;
   --font-mono:    "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;

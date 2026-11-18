@@ -17,7 +17,7 @@ export default function DeathCard() {
         position: 'absolute',
         inset: 0,
         background:
-          'radial-gradient(120% 120% at 50% 45%, rgba(10,10,14,0.55) 30%, var(--color-plate-sunken) 100%)',
+          'radial-gradient(120% 120% at 50% 45%, var(--death-veil) 30%, var(--color-plate-sunken) 100%)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
