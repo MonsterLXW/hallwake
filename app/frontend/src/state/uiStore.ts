@@ -20,6 +20,16 @@ const LORE_MS = 4_000; // LoreCard auto-dismiss (T4 spec)
 
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let loreTimer: ReturnType<typeof setTimeout> | null = null;
+let lastMarkAt = 0;
+
+// The 30 s kiosk countdown must be running in EVERY non-attract phase: a
+// player who dies or finishes and then walks away (no further input events)
+// still returns to attract. Input re-arms it via markActivity.
+function armIdleTimer(): void {
+  if (idleTimer) clearTimeout(idleTimer);
+  lastMarkAt = Date.now();
+  idleTimer = setTimeout(() => useUIStore.getState().setPhase('attract'), IDLE_MS);
+}
 
 export interface UIState {
   phase: Phase;
@@ -77,10 +87,12 @@ export const useUIStore = create<UIState>((set, get) => ({
         clearTimeout(loreTimer);
         loreTimer = null;
       }
+      lastMarkAt = 0;
       // attract wipes the run: the booth forgets everything but the ledger
       set({ phase: p, runCard: null, flavorText: null, epitaph: null, runFlavor: null });
     } else {
       set({ phase: p });
+      armIdleTimer(); // kiosk contract: the idle countdown runs in every live phase
     }
   },
 
@@ -100,7 +112,10 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   markActivity: () => {
     if (get().phase === 'attract') return;
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => useUIStore.getState().setPhase('attract'), IDLE_MS);
+    // called from key/pointer listeners AND every non-zero input frame
+    // (gamepad included, via loop.ts onActivity) at up to 60 Hz: re-arm at
+    // most once per second — 1 s granularity is plenty for a 30 s window.
+    if (Date.now() - lastMarkAt < 1000) return;
+    armIdleTimer();
   },
 }));
