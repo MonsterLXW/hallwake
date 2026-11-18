@@ -3,6 +3,7 @@
 // identical state out (proven by the golden traces).
 
 import type { EntityKind, EntityState, Frame, ItemType, SimEvent, SimState } from './types';
+import type { DoorDef } from './schedule';
 import {
   CHECKPOINT_DOORS,
   ENTRY,
@@ -21,7 +22,9 @@ import {
   sconceFlags,
   stepCinder,
   stepGaunt,
+  stepGrip,
   stepMurmur,
+  stepStare,
   stepTally,
 } from './entities';
 import { OIL_BANISH_FLOOR, OIL_CINDER_MULT, OIL_REFILL, OIL_RESPAWN, drainOil, refillOil } from './oil';
@@ -31,7 +34,10 @@ export const DEATH_FREEZE_TICKS = 90; // 1.5 s death freeze
 export const INV_CAP = 4; // Wave 1: kit slots (features.md)
 export const TONIC_INVULN_TICKS = 180; // Wave 1: 3 s of grace after a TONIC save
 export const FLASK_OIL = 0.5; // Wave 1: FLASK is an instant +0.5 oil drink
+export const GRIP_TONIC_KNOCKBACK = 3; // Wave 2: a TONIC shock shoves GRIP back 3 m
 const PLAYER_RADIUS = 0.3;
+export const PITCH_LIMIT = Math.PI / 2 - 0.05; // Wave 2: the view never flips over
+const clampPitch = (v: number): number => (v < -PITCH_LIMIT ? -PITCH_LIMIT : v > PITCH_LIMIT ? PITCH_LIMIT : v);
 
 function nearestCheckpoint(door: number): number {
   let best = 1;
@@ -48,11 +54,23 @@ function tryDeathSave(s: SimState, killer: EntityKind, events: SimEvent[]): SimS
   if (ti >= 0) {
     const inv = [...s.inv];
     inv.splice(ti, 1);
-    // a GAUNT sweep survived is over — end it so the save is real
-    const entities =
-      killer === 'GAUNT'
-        ? s.entities.map((e) => (e.kind === 'GAUNT' ? { ...e, phase: 'SURVIVED' as const } : e))
-        : s.entities;
+    // the save must be real: a GAUNT sweep survived is over, a STARE that
+    // just killed you is already drifting out, and GRIP takes a 3 m shock
+    // back down the corridor so the 3 s of grace is usable time.
+    const entities = s.entities.map((e) => {
+      if (e.kind !== killer) return e;
+      if (e.kind === 'GAUNT') return { ...e, phase: 'SURVIVED' as const };
+      if (e.kind === 'STARE') return { ...e, phase: 'DEPARTED' as const, stareTicks: 0 };
+      if (e.kind === 'GRIP') {
+        const dx = e.x - s.player.x;
+        const dz = e.z - s.player.z;
+        const d = Math.hypot(dx, dz) || 1;
+        const x = Math.min(ROOM_W - 0.2, Math.max(0.2, e.x + (dx / d) * GRIP_TONIC_KNOCKBACK));
+        const z = Math.min(ROOM_D - 0.2, Math.max(0.2, e.z + (dz / d) * GRIP_TONIC_KNOCKBACK));
+        return { ...e, x, z };
+      }
+      return e;
+    });
     events.push({ type: 'item_use', item: 'TONIC', door: s.door, visible: true });
     return { ...s, inv, entities, invuln: TONIC_INVULN_TICKS };
   }
@@ -72,21 +90,26 @@ function tryDeathSave(s: SimState, killer: EntityKind, events: SimEvent[]): SimS
   return null;
 }
 
+// Sconces start LIT in CINDER rooms (the blackout takes them) and in GRIP
+// rooms (Wave 2: the lit sconce is the authored stand-your-ground counter).
+function initialSconces(def: DoorDef): boolean[] {
+  return def.cinderOrder !== undefined || def.grip !== undefined ? [true, true, true] : [false, false, false];
+}
+
 export function makeRoomState(door: number, oil: number): SimState {
   const def = doorDef(door);
-  const isCinderRoom = def.cinderOrder !== undefined;
   return {
     tick: 0,
     door,
     roomTick: 0,
-    player: { x: ENTRY.x, z: ENTRY.z, yaw: 0, vel: { x: 0, z: 0 } },
+    player: { x: ENTRY.x, z: ENTRY.z, yaw: 0, pitch: 0, vel: { x: 0, z: 0 } },
     oil,
     alive: true,
     checkpoint: nearestCheckpoint(door),
     deaths: 0,
     runMs: 0,
     doorLog: door + 1,
-    sconces: isCinderRoom ? [true, true, true] : [false, false, false],
+    sconces: initialSconces(def),
     entities: buildEntities(def),
     events: [],
     freeze: 0,
@@ -165,7 +188,17 @@ export function stepSim(state: SimState, frame: Frame): SimState {
   if (mag > 1) { mx /= mag; mz /= mag; }
   const vel = { x: mx * WALK_SPEED, z: mz * WALK_SPEED };
   const pos = collide(s.player.x + vel.x / 60, s.player.z + vel.z / 60, def);
-  s = { ...s, player: { ...s.player, x: pos.x, z: pos.z, yaw: s.player.yaw + frame.yawD, vel } };
+  s = {
+    ...s,
+    player: {
+      ...s.player,
+      x: pos.x,
+      z: pos.z,
+      yaw: s.player.yaw + frame.yawD,
+      pitch: clampPitch(s.player.pitch + (frame.pitchD ?? 0)), // Wave 2: the sim owns the view
+      vel,
+    },
+  };
 
   // --- oil drain (x4 while CINDER active) --------------------------------
   const active = cinderActive(s.entities);
@@ -288,7 +321,6 @@ export function stepSim(state: SimState, frame: Frame): SimState {
       if (open) {
         const nd = s.door + 1;
         const ndef = doorDef(nd);
-        const isCinderRoom = ndef.cinderOrder !== undefined;
         const ev: SimEvent[] = [{ type: 'door_open', door: nd, visible: true }];
         if (ndef.checkpoint) ev.push({ type: 'checkpoint', door: nd, visible: true });
         return {
@@ -298,7 +330,7 @@ export function stepSim(state: SimState, frame: Frame): SimState {
           doorLog: nd + 1,
           player: { ...s.player, x: ENTRY.x, z: ENTRY.z, vel: { x: 0, z: 0 } },
           entities: buildEntities(ndef),
-          sconces: isCinderRoom ? [true, true, true] : [false, false, false],
+          sconces: initialSconces(ndef),
           checkpoint: ndef.checkpoint ? nd : s.checkpoint,
           deepest: Math.max(s.deepest, nd),
           oilCanUsed: false,
@@ -342,6 +374,8 @@ export function stepSim(state: SimState, frame: Frame): SimState {
       case 'MURMUR': r = stepMurmur(e, s.roomTick, s.player, s.oil, s.door); break;
       case 'TALLY': r = stepTally(e, s.roomTick, s.oil, s.door); break;
       case 'CINDER': r = stepCinder(e, s.roomTick, s.oil, s.door); break;
+      case 'STARE': r = stepStare(e, s.roomTick, s.player, def, s.oil, s.door); break;
+      case 'GRIP': r = stepGrip(e, s.roomTick, s.player, def, s.door, s.sconces); break;
     }
     entities.push(r.e);
     events.push(...r.events);

@@ -18,6 +18,8 @@ import { buildGaunt } from './gaunt';
 import { buildMurmur } from './murmur';
 import { buildTally } from './tally';
 import { buildCinder } from './cinder';
+import { buildStare } from './stare';
+import { buildGrip } from './grip';
 
 // ---- identity tokens at runtime (mirrors scene.ts / textures.ts pattern) ----
 
@@ -55,6 +57,8 @@ export const TOKEN = {
   tally: '#D6574C', // chalk red — TALLY + oil alarm share it, disambiguated by slot
   cinder: '#58B4E8', // spectral blue — CINDER
   murmur: '#C9C6BE', // hueless by design: MURMUR is luminance, not hue
+  stare: '#8FE3C8', // Wave 2 spectral jade — STARE (look-away)
+  grip: '#C9A6F2', // Wave 2 bruise lilac — GRIP (chase)
   warm: '#E3D7BC', // oil-high lantern tone
 } as const;
 
@@ -166,6 +170,46 @@ export function getFaceTexture(): THREE.CanvasTexture {
   });
 }
 
+// STARE silhouette: a bone-white eye with a spectral-jade iris and a slit
+// pupil, ringed by lash strokes — the thing that watches back. Jade belongs
+// to STARE alone (tokens.css); the sclera stays bone so it reads against
+// any wall the lantern touches.
+export function getEyeTexture(): THREE.CanvasTexture {
+  const iris = tokenRgb('--signal-stare', TOKEN.stare);
+  const sclera = tokenRgb('--color-ink', TOKEN.bone);
+  return paintTexture('entity@eye', 128, (img) => {
+    const cx = 64;
+    const cy = 64;
+    for (let y = 0; y < img.height; y++) {
+      for (let x = 0; x < img.width; x++) {
+        const dx = (x - cx) / 52; // almond: wider than tall
+        const dy = (y - cy) / 34;
+        const r = Math.hypot(dx, dy);
+        if (r > 1) continue;
+        // almond outline + sclera
+        let a = 150 + Math.round(hash(x, y, 23) * 40);
+        let col: [number, number, number] = sclera;
+        if (r > 0.92) {
+          a = 235; // lid line
+        } else if (r < 0.34) {
+          col = iris; // iris disc
+          a = 235;
+          if (r < 0.15) {
+            col = [8, 8, 12]; // pupil: the void stares back
+            a = 255;
+          }
+        }
+        setPx(img, x, y, col, a);
+      }
+    }
+    // lash strokes above the lid — five short marks, hashed jitter
+    for (let i = 0; i < 5; i++) {
+      const lx = 34 + i * 15 + Math.round((hash(i, 7, 3) - 0.5) * 4);
+      for (let s = 0; s < 7; s++) setPx(img, lx + Math.round(s / 3), 22 - s, sclera, 200);
+    }
+  });
+}
+
 // ---- tell envelopes (brief §7: flicker is information, not decoration) ----
 
 // GAUNT tell: two 180 ms blinks, then steady amber for the sweep window.
@@ -215,9 +259,14 @@ export function tellLightState(
   const gaunt = sim.entities.find((e) => e.kind === 'GAUNT');
   const cinder = sim.entities.find((e) => e.kind === 'CINDER');
   const murmur = sim.entities.find((e) => e.kind === 'MURMUR');
+  const stare = sim.entities.find((e) => e.kind === 'STARE');
   const gauntLive = !!gaunt && (gaunt.phase === 'TELL' || gaunt.phase === 'SWEEP');
   const cinderLive = !!cinder && (cinder.phase === 'TELL' || cinder.phase === 'BLACKOUT');
   const murmurNear = !!murmur && murmur.phase === 'HUNT' && (murmur.dist ?? Infinity) < 5;
+  // Wave 2: STARE washes the lantern jade while it watches (color = danger,
+  // steady — no flicker, so reduced motion reads identically). GRIP owns no
+  // light: its tell is the drag-thud, the silhouette and the glyph.
+  const stareLive = !!stare && (stare.phase === 'TELL' || stare.phase === 'ACTIVE');
 
   let lanternMul = 1;
   if (gauntLive) lanternMul *= flickerEnvelope(nowSec, tellStart.GAUNT ?? -1, reducedMotion);
@@ -228,13 +277,17 @@ export function tellLightState(
       ? tokenColor('--signal-gaunt', TOKEN.gaunt)
       : cinderLive
         ? tokenColor('--signal-cinder', TOKEN.cinder)
-        : null,
+        : stareLive
+          ? tokenColor('--signal-stare', TOKEN.stare)
+          : null,
     lanternMul,
     eventColor: cinderLive
       ? tokenColor('--signal-cinder', TOKEN.cinder)
       : gauntLive
         ? tokenColor('--signal-gaunt', TOKEN.gaunt)
-        : null,
+        : stareLive
+          ? tokenColor('--signal-stare', TOKEN.stare)
+          : null,
   };
 }
 
@@ -317,6 +370,8 @@ export function mountEntities(host: THREE.Object3D, opts: MountOptions = {}): En
     delete tellStart.GAUNT;
     delete tellStart.TALLY;
     delete tellStart.CINDER;
+    delete tellStart.STARE;
+    delete tellStart.GRIP;
   }
 
   function update(sim: SimState, events: SimEvent[], nowSec: number): void {
@@ -357,7 +412,9 @@ export function mountEntities(host: THREE.Object3D, opts: MountOptions = {}): En
         else if (e.kind === 'TALLY') {
           const fake = doorDef(sim.door).tallyFakeNum ?? sim.doorLog + 2;
           v = buildTally(fake) as unknown as AnyVisual;
-        } else v = buildCinder() as unknown as AnyVisual;
+        } else if (e.kind === 'CINDER') v = buildCinder() as unknown as AnyVisual;
+        else if (e.kind === 'STARE') v = buildStare() as unknown as AnyVisual;
+        else v = buildGrip() as unknown as AnyVisual;
         visuals.set(e.kind, v);
         host.add(v.group);
       }
@@ -365,8 +422,9 @@ export function mountEntities(host: THREE.Object3D, opts: MountOptions = {}): En
       v.update(e as never, nowSec, ctx);
 
       // schedule-keyed anchors: movers carry their own x/z; anchored kinds
-      // sit on the door geometry the sim already uses.
-      if (e.kind === 'GAUNT' || e.kind === 'MURMUR') {
+      // sit on the door geometry the sim already uses. STARE hangs at its
+      // authored point; GRIP drags along its own advancing position.
+      if (e.kind === 'GAUNT' || e.kind === 'MURMUR' || e.kind === 'STARE' || e.kind === 'GRIP') {
         v.group.position.set(e.x, 0, e.z);
       } else if (e.kind === 'TALLY') {
         v.group.position.set(7, 0, 9.78); // exit door plane, room-local

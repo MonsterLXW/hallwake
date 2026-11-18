@@ -2,7 +2,7 @@
    Every UI task imports ONLY this file. Dark-only by decision (brief §2):
    the lantern is the light source; there is no light theme.
    Identity rule: color is danger, bone is information — saturated hues are
-   reserved for the four entity signals + oil-critical alarm, never decoration.
+   reserved for the entity signals + oil-critical alarm, never decoration.
    Contrast math + CVD validation live in brief §3. OFL fonts, self-hosted. */
 
 /* ---- Fonts (self-hosted woff2, latin; OFL licenses in /fonts) ---- */
@@ -56,6 +56,9 @@
   --signal-tally:        #D6574C;  /* chalk red: frame marks + one-beat numeral glow */
   --signal-cinder:       #58B4E8;  /* spectral blue: flames turn blue, hiss */
   --signal-murmur:       #C9C6BE;  /* hueless by design: MURMUR is darkness; channel = luminance + audio + hollow ring glyph */
+  --signal-stare:        #8FE3C8;  /* Wave 2 spectral jade (13.2 bg / 12.6 plate): chime + eye silhouette -> look away */
+  --signal-grip:         #C9A6F2;  /* Wave 2 bruise lilac (9.6 bg / 9.2 plate): drag-thud + lurching silhouette -> outrun;
+                                      never co-occurs with CINDER (disjoint doors) and carries its own glyph + audio bus */
   --signal-suppressed:   0.35;     /* tell opacity when oil < 0.20 (sim fires visible:false) */
   --color-alarm:         var(--signal-tally); /* oil-critical gauge shares chalk red (brief §3) */
 

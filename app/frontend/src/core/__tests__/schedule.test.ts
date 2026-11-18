@@ -14,7 +14,7 @@ import {
   archetypeGeom,
   doorDef,
 } from '../schedule';
-import { GAUNT_TELL_LEAD, GAUNT_SWEEP_TICKS } from '../entities';
+import { GAUNT_TELL_LEAD, GAUNT_SWEEP_TICKS, GRIP_SPEED, GRIP_KILL_DIST } from '../entities';
 import { WALK_SPEED } from '../sim';
 
 describe('24-door schedule table', () => {
@@ -29,6 +29,8 @@ describe('24-door schedule table', () => {
       7: 'GAUNT', 13: 'GAUNT', 19: 'GAUNT',
       9: 'CINDER', 15: 'CINDER', 21: 'CINDER',
       10: 'MURMUR', 16: 'MURMUR', 22: 'MURMUR',
+      6: 'STARE', 14: 'STARE', 20: 'STARE',
+      8: 'GRIP', 17: 'GRIP', 23: 'GRIP',
       24: 'FINALE',
     };
     for (const d of SCHEDULE) {
@@ -216,6 +218,60 @@ describe('Wave 1 authored extras (loot, coins, locks, closets)', () => {
         expect(inside(g.loot, c), `${a} loot in collider`).toBe(false);
         expect(inside(g.coins, c), `${a} coins in collider`).toBe(false);
       }
+    }
+  });
+});
+
+describe('Wave 2 authored extras (STARE, GRIP)', () => {
+  it('STARE doors are exactly {6,14,20}; GRIP doors are exactly {8,17,23}', () => {
+    const stare = SCHEDULE.filter((d) => d.stare).map((d) => d.door);
+    const grip = SCHEDULE.filter((d) => d.grip).map((d) => d.door);
+    expect(stare).toEqual([6, 14, 20]);
+    expect(grip).toEqual([8, 17, 23]);
+    for (const door of stare) expect(doorDef(door).event).toBe('STARE');
+    for (const door of grip) expect(doorDef(door).event).toBe('GRIP');
+  });
+
+  // FAIRNESS INVARIANT: STARE's tell must telegraph a full 2 s (120 ticks)
+  // before the look-check can open, at a fixed learnable tick, and the eye
+  // must hang clear of the collision furniture so the silhouette reads.
+  it('STARE manifest points sit in-room, clear of colliders, with a >= 2 s tell lead', () => {
+    for (const door of [6, 14, 20]) {
+      const def = doorDef(door);
+      const st = def.stare!;
+      expect(st.tellTick, `door ${door} tell tick is fixed`).toBe(60);
+      expect(st.x).toBeGreaterThanOrEqual(0);
+      expect(st.x).toBeLessThanOrEqual(ROOM_W);
+      expect(st.z).toBeGreaterThanOrEqual(0);
+      expect(st.z).toBeLessThanOrEqual(ROOM_D);
+      const inside = (p: { x: number; z: number }, b: AABB) => p.x > b.x0 && p.x < b.x1 && p.z > b.z0 && p.z < b.z1;
+      for (const c of archetypeGeom(def.archetype).colliders) {
+        expect(inside(st, c), `door ${door} STARE inside a collider`).toBe(false);
+      }
+    }
+  });
+
+  // FAIRNESS INVARIANT: a GRIP door is survivable by construction — walking
+  // straight from ENTRY to the exit always beats the chase by >= 1 s, and
+  // the spawn corner is clear of furniture.
+  it('GRIP spawns are in-room, clear of colliders, and outrunnable to the exit by >= 1 s', () => {
+    for (const door of [8, 17, 23]) {
+      const def = doorDef(door);
+      const sp = def.grip!.spawn;
+      expect(sp.x).toBeGreaterThanOrEqual(0);
+      expect(sp.x).toBeLessThanOrEqual(ROOM_W);
+      expect(sp.z).toBeGreaterThanOrEqual(0);
+      expect(sp.z).toBeLessThanOrEqual(ROOM_D);
+      const inside = (p: { x: number; z: number }, b: AABB) => p.x > b.x0 && p.x < b.x1 && p.z > b.z0 && p.z < b.z1;
+      for (const c of archetypeGeom(def.archetype).colliders) {
+        expect(inside(sp, c), `door ${door} GRIP spawn inside a collider`).toBe(false);
+      }
+      const exitTime = Math.hypot(EXIT_DOOR.x - ENTRY.x, EXIT_DOOR.z - ENTRY.z) / WALK_SPEED;
+      const killTime = (Math.hypot(sp.x - ENTRY.x, sp.z - ENTRY.z) - GRIP_KILL_DIST) / GRIP_SPEED;
+      expect(
+        killTime - exitTime,
+        `door ${door}: GRIP closes in ${killTime.toFixed(2)} s but the exit takes ${exitTime.toFixed(2)} s`,
+      ).toBeGreaterThanOrEqual(1.0);
     }
   });
 });

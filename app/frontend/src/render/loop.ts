@@ -14,6 +14,7 @@ import {
   sconcePositions,
 } from '../core/schedule';
 import type { Archetype } from '../core/schedule';
+import { stareLooking } from '../core/entities';
 import type { EntityKind, Frame, ItemType, SimEvent, SimState } from '../core/types';
 import type { SceneBundle } from './scene';
 import type { PlayerController } from './playerController';
@@ -39,6 +40,8 @@ export interface HudSnapshot {
   coins: number;
   locked: boolean; // current exit is locked and the kit has no PICK
   hidden: boolean; // inside a closet
+  // Wave 2: the view is inside STARE's cone right now (the LOOK AWAY plate)
+  stareAt: boolean;
 }
 
 export type RunPhase = 'playing' | 'dead' | 'run';
@@ -61,7 +64,14 @@ export interface LoopDeps {
 // A frame counts as booth activity if it carries any input at all. Pure +
 // exported so the kiosk contract is unit-testable without RAF/WebGL.
 export function frameHasInput(f: Frame): boolean {
-  return f.mx !== 0 || f.mz !== 0 || f.yawD !== 0 || f.interact || (f.use !== undefined && f.use >= 0);
+  return (
+    f.mx !== 0 ||
+    f.mz !== 0 ||
+    f.yawD !== 0 ||
+    (f.pitchD !== undefined && f.pitchD !== 0) ||
+    f.interact ||
+    (f.use !== undefined && f.use >= 0)
+  );
 }
 
 export interface LoopHandle {
@@ -120,8 +130,12 @@ const clamp1 = (v: number): number => (v < -1 ? -1 : v > 1 ? 1 : v);
 // Deterministic scripted player: walks the corridor lane for each archetype,
 // opens real doors, relights CINDER sconces in the door's scratch order,
 // hides in the alcove during a GAUNT sweep, keeps the beam on MURMUR.
+// Wave 2 additions: on a STARE door it keeps its view pointed AWAY from the
+// eye (movement is lane-based, so looking away costs nothing); on a GRIP
+// door it sprints the lane straight to the exit and pays the loot piles no
+// mind — the porter who knows the schedule outruns a 1.6 m/s chase.
 export function createAutopilot(): (s: SimState) => Frame {
-  const f: Frame = { mx: 0, mz: 0, yawD: 0, interact: false };
+  const f: Frame = { mx: 0, mz: 0, yawD: 0, pitchD: 0, interact: false };
   let prevWant = false;
   const laneX: Record<Archetype, number> = {
     junction: 7,
@@ -135,6 +149,7 @@ export function createAutopilot(): (s: SimState) => Frame {
     f.mx = 0;
     f.mz = 0;
     f.yawD = 0;
+    f.pitchD = 0;
     f.interact = false;
     if (!s.alive || s.finished) return f;
 
@@ -143,7 +158,11 @@ export function createAutopilot(): (s: SimState) => Frame {
     const gaunt = s.entities.find((e) => e.kind === 'GAUNT');
     const cinder = s.entities.find((e) => e.kind === 'CINDER');
     const murmur = s.entities.find((e) => e.kind === 'MURMUR');
+    const stare = s.entities.find((e) => e.kind === 'STARE');
+    const grip = s.entities.find((e) => e.kind === 'GRIP');
     const gauntLive = !!gaunt && (gaunt.phase === 'TELL' || gaunt.phase === 'SWEEP');
+    const stareLive = !!stare && (stare.phase === 'TELL' || stare.phase === 'ACTIVE');
+    const gripLive = !!grip && grip.phase !== 'BANISHED';
     // The schedule is fixed and learnable: a porter who knows door 7 has a
     // GAUNT walks to the alcove on ROOM ENTRY, not when the tell fires.
     const gauntPrep = !!def.gaunt && !!gaunt && gaunt.phase === 'IDLE';
@@ -153,7 +172,10 @@ export function createAutopilot(): (s: SimState) => Frame {
     let want = false;
     let standStill = false;
 
-    if ((gauntLive || gauntPrep) && def.gaunt) {
+    if (gripLive) {
+      // GRIP: default routing (lane toward the exit) IS the counterplay —
+      // skip every loot/oil detour while it is on the floor with you.
+    } else if ((gauntLive || gauntPrep) && def.gaunt) {
       const al = archetypeGeom(def.archetype).alcoves[def.gaunt.alcoveIndex];
       tx = (al.x0 + al.x1) / 2;
       tz = (al.z0 + al.z1) / 2;
@@ -190,11 +212,31 @@ export function createAutopilot(): (s: SimState) => Frame {
     if (want && !prevWant) f.interact = true;
     prevWant = want;
 
-    const fx = murmur ? murmur.x : tx;
-    const fz = murmur ? murmur.z : tz;
+    // View: STARE doors face AWAY from the eye (the cone check is yaw+pitch;
+    // facing the opposite bearing keeps the dot at -1). MURMUR doors keep
+    // the beam on it. Everywhere else, face the travel target.
+    let fx: number;
+    let fz: number;
+    let faceAway = false;
+    if (stareLive && stare) {
+      fx = stare.x;
+      fz = stare.z;
+      faceAway = true;
+    } else if (murmur) {
+      fx = murmur.x;
+      fz = murmur.z;
+    } else {
+      fx = tx;
+      fz = tz;
+    }
     let d = Math.atan2(fx - p.x, fz - p.z) - p.yaw;
     while (d > Math.PI) d -= Math.PI * 2;
     while (d < -Math.PI) d += Math.PI * 2;
+    if (faceAway) {
+      d += Math.PI;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+    }
     f.yawD = d < -0.3 ? -0.3 : d > 0.3 ? 0.3 : d;
     return f;
   };
@@ -258,8 +300,9 @@ export function startLoop(deps: LoopDeps): LoopHandle {
       if (acc > DT * MAX_CATCHUP_STEPS) acc = 0; // drop the backlog, never spiral
     }
 
-    const pitch = autopilot ? 0 : deps.controller.lookPitch;
-    deps.scene.update(sim, events, t / 1000, pitch);
+    // Wave 2: the sim owns the view (STARE reads yaw AND pitch), so the
+    // camera pitch comes straight from sim state — autopilot included.
+    deps.scene.update(sim, events, t / 1000, sim.player.pitch);
     entityHost.update(sim, events, t / 1000); // meshes + audio dispatch (T3)
     if (deps.onEvent) for (const e of events) deps.onEvent(e);
     events.length = 0;
@@ -278,11 +321,12 @@ export function startLoop(deps: LoopDeps): LoopHandle {
       hudAt = t;
       let tellKind: EntityKind | null = null;
       for (const e of sim.entities) {
-        if (e.phase !== 'IDLE' && e.phase !== 'SURVIVED' && e.phase !== 'BANISHED') {
+        if (e.phase !== 'IDLE' && e.phase !== 'SURVIVED' && e.phase !== 'BANISHED' && e.phase !== 'DEPARTED') {
           tellKind = e.kind;
           break;
         }
       }
+      const stare = sim.entities.find((e) => e.kind === 'STARE');
       deps.onHud({
         door: sim.door,
         doorLog: sim.doorLog,
@@ -298,6 +342,7 @@ export function startLoop(deps: LoopDeps): LoopHandle {
         coins: sim.coins,
         locked: doorDef(sim.door).locked === true && !sim.inv.includes('PICK'),
         hidden: sim.hidden,
+        stareAt: !!stare && stare.phase === 'ACTIVE' && stareLooking(stare, sim.player),
       });
     }
     deps.onPhase(sim.finished ? 'run' : sim.alive ? 'playing' : 'dead');

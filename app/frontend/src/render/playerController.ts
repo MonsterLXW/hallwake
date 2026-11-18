@@ -15,9 +15,6 @@ export interface ControllerHooks {
 const LOOK_SENS = 0.0024; // rad per px of mouse movement
 const STICK_LOOK = 0.05; // rad per tick at full right-stick deflection
 const DEADZONE = 0.15;
-const PITCH_LIMIT = Math.PI / 2 - 0.05; // never let the camera flip over
-
-const clampPitch = (v: number): number => (v < -PITCH_LIMIT ? -PITCH_LIMIT : v > PITCH_LIMIT ? PITCH_LIMIT : v);
 
 // Rotate camera-relative intent (fwd, str) into world axes for the sim.
 // yaw 0 faces +z (north); the camera (rotation.y = yaw+PI) has screen-right =
@@ -32,12 +29,12 @@ export function rotateIntent(fwd: number, str: number, yaw: number): { mx: numbe
 export class PlayerController {
   private keys = new Set<string>();
   private yawDelta = 0;
-  private pitch = 0; // view-only vertical look; never enters the sim (movement stays axis-aligned)
+  private pitchDelta = 0; // Wave 2: look deltas ride the Frame; the sim owns/clamps pitch
   private interactEdge = false;
   private useEdge = -1; // Wave 1: inventory slot 0..3 pressed since last frame
   private prevPadInteract = false;
   private locked = false;
-  private frame: Frame = { mx: 0, mz: 0, yawD: 0, interact: false, use: -1 };
+  private frame: Frame = { mx: 0, mz: 0, yawD: 0, pitchD: 0, interact: false, use: -1 };
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -46,12 +43,6 @@ export class PlayerController {
 
   get isLocked(): boolean {
     return this.locked;
-  }
-
-  /** View-only vertical look (radians, clamped). The loop feeds this to the
-      camera; it is deliberately NOT part of the sim, so movement stays pure. */
-  get lookPitch(): number {
-    return this.pitch;
   }
 
   attach(): void {
@@ -98,8 +89,8 @@ export class PlayerController {
   private onMouseMove = (e: MouseEvent): void => {
     if (!this.locked) return;
     this.yawDelta += e.movementX * LOOK_SENS;
-    // moving the mouse up (movementY < 0) looks up (+pitch)
-    this.pitch = clampPitch(this.pitch - e.movementY * LOOK_SENS);
+    // moving the mouse up (movementY < 0) looks up (+pitch); the sim clamps
+    this.pitchDelta -= e.movementY * LOOK_SENS;
   };
 
   private onLockChange = (): void => {
@@ -121,7 +112,7 @@ export class PlayerController {
       fwd += pad.fwd;
       str += pad.str;
       this.yawDelta += pad.yawD;
-      this.pitch = clampPitch(this.pitch - pad.pitchD); // stick up (axes[3]<0) looks up
+      this.pitchDelta -= pad.pitchD; // stick up (axes[3]<0) looks up
       if (pad.interact && !this.prevPadInteract) this.interactEdge = true;
       this.prevPadInteract = pad.interact;
     } else {
@@ -138,6 +129,8 @@ export class PlayerController {
     f.mz = m.mz;
     f.yawD = this.yawDelta;
     this.yawDelta = 0;
+    f.pitchD = this.pitchDelta;
+    this.pitchDelta = 0;
     f.interact = this.interactEdge;
     this.interactEdge = false;
     f.use = this.useEdge;

@@ -69,4 +69,37 @@ describe('autopilot dev entry (plays doors with the sim)', () => {
     expect(s.door).toBe(5);
     expect(s.inv.includes('PICK')).toBe(false); // the PICK was spent on the lock
   });
+
+  it('survives door 6 STARE: it walks the lane with its view averted', () => {
+    const ap = createAutopilot();
+    let s = makeRoomState(6, 1);
+    for (let i = 0; i < 700 && s.door === 6 && s.alive; i++) s = stepSim(s, ap(s));
+    expect(s.alive).toBe(true);
+    expect(s.door).toBe(7); // cleared the eye room before the sweep door's resolve
+  });
+
+  it('outruns door 8 GRIP: sprints the lounge lane to the exit, ignores the WARD bait', () => {
+    const ap = createAutopilot();
+    let s = makeRoomState(8, 1);
+    for (let i = 0; i < 600 && s.door === 8 && s.alive; i++) s = stepSim(s, ap(s));
+    expect(s.alive).toBe(true);
+    expect(s.door).toBe(9);
+  });
+
+  it('clears door 14 (STARE + locked exit): averts the view, spends the PICK, opens', () => {
+    const ap = createAutopilot();
+    let s = makeRoomState(14, 1);
+    for (let i = 0; i < 3000 && s.door === 14 && s.alive; i++) s = stepSim(s, ap(s));
+    expect(s.alive).toBe(true);
+    expect(s.door).toBe(15);
+  });
+
+  it('finishes the whole 24-door run with zero deaths (?auto=1 perf gate)', () => {
+    const ap = createAutopilot();
+    let s = createInitialState(1);
+    for (let i = 0; i < 60_000 && !s.finished; i++) s = stepSim(s, ap(s));
+    expect(s.finished).toBe(true);
+    expect(s.deaths).toBe(0);
+    expect(s.deepest).toBe(24);
+  });
 });

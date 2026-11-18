@@ -6,7 +6,7 @@ import type { ItemType } from './types';
 
 export type Archetype = 'junction' | 'guest' | 'laundry' | 'lounge' | 'boiler' | 'washroom';
 export type Variant = 'A' | 'B';
-export type DoorEvent = 'GAUNT' | 'MURMUR' | 'TALLY' | 'CINDER' | 'FINALE';
+export type DoorEvent = 'GAUNT' | 'MURMUR' | 'TALLY' | 'CINDER' | 'STARE' | 'GRIP' | 'FINALE';
 
 export interface DoorDef {
   door: number; // 1..24
@@ -23,6 +23,9 @@ export interface DoorDef {
   coins?: number; // this room's coin pile (at archetypeGeom coins anchor)
   locked?: boolean; // exit door needs a PICK from the kit
   closet?: AABB; // enterable hide rect (distinct from the alcove nooks)
+  // --- Wave 2 authored extras (features.md): the two new threats ---
+  stare?: { x: number; z: number; tellTick: number }; // fixed manifest point + chime tick
+  grip?: { spawn: { x: number; z: number } }; // chase spawn corner (fixed slot)
 }
 
 export interface AABB {
@@ -171,7 +174,14 @@ export const SCHEDULE: DoorDef[] = [
     door: 5, archetype: 'junction', variant: 'A', event: 'TALLY', checkpoint: true,
     tallyFakeNum: 8,
   },
-  { door: 6, archetype: 'laundry', variant: 'A', event: null, checkpoint: false, loot: 'FLASK', coins: 4 },
+  {
+    door: 6, archetype: 'laundry', variant: 'A', event: 'STARE', checkpoint: false,
+    loot: 'FLASK', coins: 4,
+    // Wave 2: STARE manifests east of the centre lane at roomTick 60 — the
+    // chime + eye silhouette telegraph, the look-check opens 2 s later.
+    // Walking the lane with the view forward or west never enters its cone.
+    stare: { x: 12.8, z: 5.5, tellTick: 60 },
+  },
   {
     door: 7, archetype: 'guest', variant: 'A', event: 'GAUNT', checkpoint: false,
     gaunt: { alcoveIndex: 0, tellTick: 60, waypoints: [[1, 2], [13, 8]] },
@@ -180,7 +190,14 @@ export const SCHEDULE: DoorDef[] = [
     // alternative to the west alcove.
     closet: { x0: 12.4, x1: 13.8, z0: 7.4, z1: 9.4 },
   },
-  { door: 8, archetype: 'lounge', variant: 'A', event: null, checkpoint: false, loot: 'WARD', coins: 3 },
+  {
+    door: 8, archetype: 'lounge', variant: 'A', event: 'GRIP', checkpoint: false,
+    loot: 'WARD', coins: 3,
+    // Wave 2: GRIP spawns in the far-west corner the moment the door opens
+    // and drags toward you at a fixed 1.6 m/s. Sprint the lane to the exit
+    // (or hold a lit sconce) — the WARD pile is bait you pay for in time.
+    grip: { spawn: { x: 1, z: 9 } },
+  },
   {
     door: 9, archetype: 'boiler', variant: 'A', event: 'CINDER', checkpoint: true,
     cinderOrder: [0, 1, 2],
@@ -207,7 +224,13 @@ export const SCHEDULE: DoorDef[] = [
     // Wave 1: far-east closet — the one nook the sweep never enters.
     closet: { x0: 12.4, x1: 13.8, z0: 7.4, z1: 9.4 },
   },
-  { door: 14, archetype: 'washroom', variant: 'B', event: null, checkpoint: false, locked: true, loot: 'PICK' },
+  {
+    door: 14, archetype: 'washroom', variant: 'B', event: 'STARE', checkpoint: false,
+    locked: true, loot: 'PICK',
+    // Wave 2: STARE hangs between the PICK pile and the locked exit — the
+    // escalation door: work the lock while keeping your view off the eye.
+    stare: { x: 9, z: 7.5, tellTick: 60 },
+  },
   {
     door: 15, archetype: 'boiler', variant: 'B', event: 'CINDER', checkpoint: false,
     cinderOrder: [2, 0, 1],
@@ -216,7 +239,13 @@ export const SCHEDULE: DoorDef[] = [
     door: 16, archetype: 'laundry', variant: 'A', event: 'MURMUR', checkpoint: false,
     murmurSpawn: { x: 13, z: 9 },
   },
-  { door: 17, archetype: 'lounge', variant: 'B', event: null, checkpoint: true, loot: 'FLASK', coins: 5 },
+  {
+    door: 17, archetype: 'lounge', variant: 'B', event: 'GRIP', checkpoint: true,
+    loot: 'FLASK', coins: 5,
+    // Wave 2: GRIP at a checkpoint — die here and the chase replays. Spawn
+    // mirrors door 8 across the room (far-east corner).
+    grip: { spawn: { x: 13, z: 9 } },
+  },
   {
     door: 18, archetype: 'junction', variant: 'A', event: 'TALLY', checkpoint: false,
     tallyFakeNum: 21,
@@ -227,7 +256,13 @@ export const SCHEDULE: DoorDef[] = [
     // Wave 1: far-east closet, mirroring doors 7/13.
     closet: { x0: 12.4, x1: 13.8, z0: 7.4, z1: 9.4 },
   },
-  { door: 20, archetype: 'washroom', variant: 'A', event: null, checkpoint: false, coins: 3 },
+  {
+    door: 20, archetype: 'washroom', variant: 'A', event: 'STARE', checkpoint: false,
+    coins: 3,
+    // Wave 2: the third STARE, mirrored west — the coin pile at (7,3) sits
+    // on the lane, the eye watches from the basins. Same tell rhythm, new room.
+    stare: { x: 4.5, z: 7.5, tellTick: 60 },
+  },
   {
     door: 21, archetype: 'boiler', variant: 'A', event: 'CINDER', checkpoint: true,
     cinderOrder: [1, 2, 0],
@@ -236,7 +271,13 @@ export const SCHEDULE: DoorDef[] = [
     door: 22, archetype: 'laundry', variant: 'B', event: 'MURMUR', checkpoint: false,
     murmurSpawn: { x: 1, z: 9 },
   },
-  { door: 23, archetype: 'lounge', variant: 'A', event: null, checkpoint: false, loot: 'WARD', coins: 4 },
+  {
+    door: 23, archetype: 'lounge', variant: 'A', event: 'GRIP', checkpoint: false,
+    loot: 'WARD', coins: 4,
+    // Wave 2: the last chase before the finale — same far-west spawn as
+    // door 8, so a porter who learned 8 reads 23 at once.
+    grip: { spawn: { x: 1, z: 9 } },
+  },
   {
     door: 24, archetype: 'boiler', variant: 'B', event: 'FINALE', checkpoint: false,
     cinderOrder: [0, 2, 1],

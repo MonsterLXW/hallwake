@@ -49,8 +49,9 @@ function ItemGlyph({ item }: { item: ItemType }) {
 }
 
 // Tell glyphs (brief §6): GAUNT = tall slit, MURMUR = hollow ring,
-// TALLY = four-stroke tally, CINDER = flame outline. Color is never the
-// sole channel — each tell also carries its distinct glyph shape.
+// TALLY = four-stroke tally, CINDER = flame outline, STARE = eye with a
+// slit pupil (Wave 2), GRIP = four dragging knuckles (Wave 2). Color is
+// never the sole channel — each tell also carries its distinct glyph shape.
 function TellGlyph({ kind }: { kind: EntityKind }) {
   const stroke =
     kind === 'GAUNT'
@@ -59,7 +60,11 @@ function TellGlyph({ kind }: { kind: EntityKind }) {
         ? 'var(--signal-tally)'
         : kind === 'CINDER'
           ? 'var(--signal-cinder)'
-          : 'var(--signal-murmur)';
+          : kind === 'STARE'
+            ? 'var(--signal-stare)'
+            : kind === 'GRIP'
+              ? 'var(--signal-grip)'
+              : 'var(--signal-murmur)';
   return (
     <svg
       viewBox="0 0 28 28"
@@ -82,6 +87,19 @@ function TellGlyph({ kind }: { kind: EntityKind }) {
         </g>
       )}
       {kind === 'CINDER' && <path d="M14 3c4 5 7 8 7 13a7 7 0 0 1-14 0c0-5 3-8 7-13Z" />}
+      {kind === 'STARE' && (
+        <g>
+          <path d="M2 14c4-6 8-9 12-9s8 3 12 9c-4 6-8 9-12 9s-8-3-12-9Z" />
+          <circle cx="14" cy="14" r="4" />
+          <path d="M14 11v6" />
+        </g>
+      )}
+      {kind === 'GRIP' && (
+        <g>
+          <path d="M5 6c0 8 1 12 3 16M11 4c0 9 1 13 2 18M17 4c0 9 0 13-1 18M23 6c0 8-1 12-3 16" />
+          <path d="M4 24h20" />
+        </g>
+      )}
     </svg>
   );
 }
@@ -321,6 +339,34 @@ export default function Hud() {
           }}
         >
           [E] {hud.interactPrompt}
+        </div>
+      )}
+
+      {/* Wave 2: STARE peripheral warning — the view is inside the eye's
+          cone right now. Left-center plate (a true peripheral slot, clear of
+          the center glyph/prompt stack); jade is STARE's channel, and the
+          words carry the meaning without color. */}
+      {hud.stareAt && (
+        <div
+          role="alert"
+          style={{
+            position: 'absolute',
+            left: 'var(--hud-safe)',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--text-2xs)',
+            letterSpacing: 'var(--tracking-label)',
+            textTransform: 'uppercase',
+            color: 'var(--signal-stare)',
+            background: 'var(--color-plate-alpha)',
+            border: 'var(--border-plate)',
+            borderLeft: '2px solid var(--signal-stare)',
+            padding: 'var(--space-2) var(--space-3)',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Look away
         </div>
       )}
 

@@ -1,10 +1,10 @@
 // HALLWAKE — the WebAudio synth graph (architecture.md §8). Zero audio
 // files: every voice is an OscillatorNode or a deterministic noise buffer,
-// routed through the six buses to masterGain -> DynamicsCompressor ->
-// destination. The AudioContext is created lazily on first user input
-// (kiosk keypress resumes it — browsers start it suspended), and importing
-// this module in a headless environment is safe: nothing touches WebAudio
-// until ensure() runs.
+// routed through the eight buses (six from §8 + the Wave 2 stare/grip buses)
+// to masterGain -> DynamicsCompressor -> destination. The AudioContext is
+// created lazily on first user input (kiosk keypress resumes it), and
+// importing this module in a headless environment is safe: nothing touches
+// WebAudio until ensure() runs.
 //
 //   masterGain -> DynamicsCompressor -> destination
 //    ├─ ambienceBus   brown-noise loop + 55 Hz sine drone (always on, 0.15)
@@ -12,7 +12,9 @@
 //    ├─ gauntBus      slam cue + amber hum (sawtooth 90 Hz + tremolo)
 //    ├─ murmurBus     whisper: filtered noise, gain = facing dot
 //    ├─ tallyBus      chalk scratch (bandpass noise), red-glow ping
-//    └─ cinderBus     blue-flame hiss (rising sweep), sconce relight chime
+//    ├─ cinderBus     blue-flame hiss (rising sweep), sconce relight chime
+//    ├─ stareBus      Wave 2: cold twin-bell chime + high shimmer
+//    └─ gripBus       Wave 2: low groan + knuckle drag (tremolo)
 
 import type { SimEvent } from '../core/types';
 import { cueForEvent, FOOTSTEP_CUE, WHISPER_BED, type BusName, type CueRecipe, type Layer } from './cues';
@@ -24,6 +26,8 @@ const BUS_GAIN: Record<BusName, number> = {
   murmur: 0.4,
   tally: 0.4,
   cinder: 0.4,
+  stare: 0.4, // Wave 2: the chime bus
+  grip: 0.45, // Wave 2: the drag-thud bus
 };
 
 // deterministic white noise (LCG — never Math.random, so a run sounds

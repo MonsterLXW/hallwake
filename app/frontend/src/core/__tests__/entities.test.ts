@@ -1,16 +1,39 @@
-// FSM unit tests for the four entities + oil economy + scoring validation.
+// FSM unit tests for the six entities + oil economy + scoring validation.
 
 import { describe, it, expect } from 'vitest';
 import { stepSim, makeRoomState, createInitialState } from '../sim';
-import { buildEntities, stepGaunt, stepMurmur, stepTally, stepCinder } from '../entities';
+import {
+  buildEntities,
+  stepGaunt,
+  stepMurmur,
+  stepTally,
+  stepCinder,
+  stepStare,
+  stepGrip,
+  stareLooking,
+  STARE_TELL_LEAD,
+  STARE_GRACE_TICKS,
+  STARE_LINGER_TICKS,
+  GRIP_SPEED,
+  GRIP_KILL_DIST,
+} from '../entities';
 import { drainOil, refillOil, lanternRadius, OIL_DRAIN_PER_TICK, OIL_CRITICAL } from '../oil';
 import { validateScore, runCardFrom } from '../scoring';
 import { doorDef } from '../schedule';
-import type { Frame, GauntState, MurmurState, TallyState, CinderState, PlayerState } from '../types';
+import type {
+  Frame,
+  GauntState,
+  MurmurState,
+  TallyState,
+  CinderState,
+  StareState,
+  GripState,
+  PlayerState,
+} from '../types';
 
 const NOOP: Frame = { mx: 0, mz: 0, yawD: 0, interact: false };
-const still: PlayerState = { x: 7, z: 1.5, yaw: 0, vel: { x: 0, z: 0 } };
-const moving: PlayerState = { x: 7, z: 1.5, yaw: 0, vel: { x: 2.2, z: 0 } };
+const still: PlayerState = { x: 7, z: 1.5, yaw: 0, pitch: 0, vel: { x: 0, z: 0 } };
+const moving: PlayerState = { x: 7, z: 1.5, yaw: 0, pitch: 0, vel: { x: 2.2, z: 0 } };
 
 describe('GAUNT FSM', () => {
   const g0 = (): GauntState => buildEntities(doorDef(7)).find((e) => e.kind === 'GAUNT') as GauntState;
@@ -26,7 +49,7 @@ describe('GAUNT FSM', () => {
 
   it('SWEEP begins at roomTick 205 and resolves SURVIVED at 565 when hidden', () => {
     let g = g0();
-    const inAlcove: PlayerState = { x: 0.9, z: 1.5, yaw: 0, vel: { x: 0, z: 0 } };
+    const inAlcove: PlayerState = { x: 0.9, z: 1.5, yaw: 0, pitch: 0, vel: { x: 0, z: 0 } };
     for (let t = 1; t <= 205; t++) g = stepGaunt(g, t, inAlcove, doorDef(7), 1, 7).e;
     expect(g.phase).toBe('SWEEP');
     for (let t = 206; t <= 565; t++) g = stepGaunt(g, t, inAlcove, doorDef(7), 1, 7).e;
@@ -51,7 +74,7 @@ describe('MURMUR FSM', () => {
 
   it('freezes when inside the 25-degree lantern cone with oil > 0.20', () => {
     const m = m0();
-    const p: PlayerState = { x: 7, z: 1.5, yaw: -0.6747434853607526, vel: { x: 0, z: 0 } };
+    const p: PlayerState = { x: 7, z: 1.5, yaw: -0.6747434853607526, pitch: 0, vel: { x: 0, z: 0 } };
     const r = stepMurmur(m, 60, p, 0.5, 10);
     expect(r.e.phase).toBe('FROZEN');
     expect(r.e.dist).toBeCloseTo(Math.hypot(6, 7.5), 9);
@@ -67,7 +90,7 @@ describe('MURMUR FSM', () => {
 
   it('advances even in the cone when oil <= 0.20', () => {
     const m = m0();
-    const p: PlayerState = { x: 7, z: 1.5, yaw: -0.6747434853607526, vel: { x: 0, z: 0 } };
+    const p: PlayerState = { x: 7, z: 1.5, yaw: -0.6747434853607526, pitch: 0, vel: { x: 0, z: 0 } };
     const r = stepMurmur(m, 60, p, 0.2, 10);
     expect(r.e.phase).toBe('HUNT');
   });
@@ -126,6 +149,118 @@ describe('CINDER FSM', () => {
     c = stepCinder(c, 120, 1, 9).e;
     for (let i = 0; i < 3; i++) c = { ...c, progress: c.progress + 1 };
     expect(c.progress).toBe(3);
+  });
+});
+
+describe('STARE FSM (Wave 2)', () => {
+  const s0 = (): StareState => buildEntities(doorDef(6)).find((e) => e.kind === 'STARE') as StareState;
+  // door 6 STARE sits at (12.8, 5.5); from ENTRY (7,1.5) the bearing is
+  // atan2(5.8, 4) = 0.9686 rad — yaw 0 (facing +z) is 55 deg off, well
+  // outside the 30 deg cone.
+  const def6 = doorDef(6);
+
+  it('builds at the authored point, IDLE until the tell tick', () => {
+    const s = s0();
+    expect(s.x).toBe(12.8);
+    expect(s.z).toBe(5.5);
+    expect(stepStare(s, 59, still, def6, 1, 6).e.phase).toBe('IDLE');
+    const r = stepStare(s, 60, still, def6, 1, 6);
+    expect(r.e.phase).toBe('TELL');
+    expect(r.events.some((e) => e.type === 'tell' && e.entity === 'STARE')).toBe(true);
+  });
+
+  it('the look-check opens only after the tell lead; looking away is safe', () => {
+    let s = s0();
+    for (let t = 1; t <= 60; t++) s = stepStare(s, t, still, def6, 1, 6).e;
+    for (let t = 61; t < 60 + STARE_TELL_LEAD; t++) s = stepStare(s, t, still, def6, 1, 6).e;
+    expect(s.phase).toBe('TELL');
+    // the check opens at tellTick + lead; even staring then needs the grace
+    const staring: PlayerState = { ...still, yaw: Math.atan2(5.8, 4) };
+    let died = false;
+    for (let t = 180; t < 180 + STARE_GRACE_TICKS; t++) {
+      const r = stepStare(s, t, staring, def6, 1, 6);
+      s = r.e;
+      if (r.died) died = true;
+    }
+    expect(s.phase).toBe('ACTIVE');
+    expect(died).toBe(false); // grace not yet burned
+  });
+
+  it('continuous looking past the grace kills; breaking eye contact resets', () => {
+    const staring: PlayerState = { ...still, yaw: Math.atan2(5.8, 4) };
+    let s: StareState = { ...s0(), phase: 'ACTIVE' };
+    let died = false;
+    for (let t = 181; t <= 180 + STARE_GRACE_TICKS + 1 && !died; t++) {
+      const r = stepStare(s, t, staring, def6, 1, 6);
+      s = r.e;
+      died = !!r.died;
+    }
+    expect(died).toBe(true); // grace+1 consecutive ticks
+    // reset behaviour: alternating looks never accumulate past the grace
+    let s2: StareState = { ...s0(), phase: 'ACTIVE' };
+    let died2 = false;
+    for (let t = 181; t < 400 && !died2; t++) {
+      const p = t % 3 === 0 ? still : staring;
+      const r = stepStare(s2, t, p, def6, 1, 6);
+      s2 = r.e;
+      died2 = !!r.died;
+    }
+    expect(died2).toBe(false);
+  });
+
+  it('departs (survived) after the fixed ACTIVE window', () => {
+    let s: StareState = { ...s0(), phase: 'ACTIVE' };
+    for (let t = 181; t < 60 + STARE_TELL_LEAD + STARE_LINGER_TICKS; t++) s = stepStare(s, t, still, def6, 1, 6).e;
+    expect(s.phase).toBe('ACTIVE');
+    s = stepStare(s, 60 + STARE_TELL_LEAD + STARE_LINGER_TICKS, still, def6, 1, 6).e;
+    expect(s.phase).toBe('DEPARTED');
+  });
+
+  it('stareLooking reads yaw AND pitch', () => {
+    const s = s0();
+    const at: PlayerState = { ...still, yaw: Math.atan2(5.8, 4) };
+    expect(stareLooking(s, at)).toBe(true);
+    expect(stareLooking(s, { ...at, yaw: at.yaw + Math.PI })).toBe(false); // behind
+    expect(stareLooking(s, { ...at, pitch: -0.9 })).toBe(false); // looking at the floor
+    expect(stareLooking(s, { ...at, pitch: 0.9 })).toBe(false); // looking at the ceiling
+  });
+});
+
+describe('GRIP FSM (Wave 2)', () => {
+  const g0 = (): GripState => buildEntities(doorDef(8)).find((e) => e.kind === 'GRIP') as GripState;
+  const def8 = doorDef(8);
+  const LIT = [true, true, true];
+
+  it('spawns at the authored corner and emits its tell on the first tick', () => {
+    const g = g0();
+    expect(g.x).toBe(1);
+    expect(g.z).toBe(9);
+    const r = stepGrip(g, 1, still, def8, 8, LIT);
+    expect(r.events.some((e) => e.type === 'tell' && e.entity === 'GRIP')).toBe(true);
+  });
+
+  it('advances exactly GRIP_SPEED/60 per tick toward the player', () => {
+    const g = g0();
+    const r = stepGrip(g, 2, still, def8, 8, LIT);
+    const d0 = Math.hypot(g.x - still.x, g.z - still.z);
+    expect(r.e.dist).toBeCloseTo(d0 - GRIP_SPEED / 60, 9);
+    expect(r.e.phase).toBe('HUNT');
+  });
+
+  it('freezes while the player holds a lit sconce, re-engages when it dies', () => {
+    const atSconce: PlayerState = { x: 7, z: 6, yaw: 0, pitch: 0, vel: { x: 0, z: 0 } }; // lounge sconce 1
+    const r = stepGrip(g0(), 5, atSconce, def8, 8, LIT);
+    expect(r.e.phase).toBe('FROZEN');
+    expect(r.e.x).toBe(1); // did not move
+    const dark = stepGrip(r.e, 6, atSconce, def8, 8, [false, false, false]);
+    expect(dark.e.phase).toBe('HUNT'); // re-engages the moment the light dies
+  });
+
+  it('kills at dist < GRIP_KILL_DIST', () => {
+    const g: GripState = { ...g0(), x: 7, z: 2.2 };
+    const r = stepGrip(g, 9, still, def8, 8, LIT);
+    expect(r.e.dist).toBeLessThan(GRIP_KILL_DIST);
+    expect(r.died).toBe(true);
   });
 });
 

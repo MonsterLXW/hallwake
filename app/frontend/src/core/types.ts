@@ -1,6 +1,7 @@
 // HALLWAKE core — shared types. Pure data only: no THREE, no DOM, no WebAudio.
 
-export type EntityKind = 'GAUNT' | 'MURMUR' | 'TALLY' | 'CINDER';
+// Wave 2 roster (features.md): STARE = look-away threat, GRIP = corridor chase.
+export type EntityKind = 'GAUNT' | 'MURMUR' | 'TALLY' | 'CINDER' | 'STARE' | 'GRIP';
 
 // Wave 1 kit items (features.md): WARD banishes the killing entity, TONIC
 // survives one hit, PICK opens a locked exit door, FLASK is +0.5 oil on use.
@@ -31,6 +32,7 @@ export interface Frame {
   mx: number; // movement intent, room-local axes, [-1,1]
   mz: number;
   yawD: number; // yaw delta applied this tick, radians
+  pitchD?: number; // Wave 2: pitch delta this tick (STARE reads the full view)
   interact: boolean;
   use?: number; // inventory slot 0..3 actively used this tick (number keys)
 }
@@ -69,12 +71,35 @@ export interface CinderState extends EntitySnapshot {
   blackoutCount: number; // sconces extinguished by the timer
 }
 
-export type EntityState = GauntState | MurmurState | TallyState | CinderState;
+// Wave 2 — STARE (look-away): manifests at a fixed door/tick; while ACTIVE,
+// holding the view inside its cone past a short fixed grace is lethal.
+// DEPARTED is the survived terminal; BANISHED is the WARD terminal.
+export interface StareState extends EntitySnapshot {
+  kind: 'STARE';
+  phase: 'IDLE' | 'TELL' | 'ACTIVE' | 'DEPARTED' | 'BANISHED';
+  x: number; // fixed manifest position (schedule-authored)
+  z: number;
+  stareTicks: number; // consecutive ticks the view has been inside the cone
+}
+
+// Wave 2 — GRIP (chase): spawns on room entry at a fixed corner and advances
+// a fixed distance/tick toward the player. FROZEN while the player stands by
+// a LIT sconce — the sconce light is the second counterplay.
+export interface GripState extends EntitySnapshot {
+  kind: 'GRIP';
+  phase: 'HUNT' | 'FROZEN' | 'BANISHED';
+  x: number;
+  z: number;
+  dist: number;
+}
+
+export type EntityState = GauntState | MurmurState | TallyState | CinderState | StareState | GripState;
 
 export interface PlayerState {
   x: number;
   z: number;
   yaw: number;
+  pitch: number; // Wave 2: vertical look, clamped; STARE reads yaw AND pitch
   vel: { x: number; z: number };
 }
 

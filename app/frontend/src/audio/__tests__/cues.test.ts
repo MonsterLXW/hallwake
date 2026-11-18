@@ -26,8 +26,8 @@ const EVENT_TYPES: EventType[] = [
   'tell', 'death', 'door_open', 'banish', 'checkpoint', 'finale',
   'loot', 'coin', 'item_use', 'lock', 'hide',
 ];
-const ENTITY_KINDS: EntityKind[] = ['GAUNT', 'MURMUR', 'TALLY', 'CINDER'];
-const BUSES: BusName[] = ['ambience', 'door', 'gaunt', 'murmur', 'tally', 'cinder'];
+const ENTITY_KINDS: EntityKind[] = ['GAUNT', 'MURMUR', 'TALLY', 'CINDER', 'STARE', 'GRIP'];
+const BUSES: BusName[] = ['ambience', 'door', 'gaunt', 'murmur', 'tally', 'cinder', 'stare', 'grip'];
 const OSC_KINDS: OscKind[] = ['sine', 'square', 'sawtooth', 'triangle', 'noise'];
 
 function checkRecipe(label: string, r: CueRecipe): void {

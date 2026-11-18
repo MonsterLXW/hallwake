@@ -49,6 +49,7 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
   const cGaunt = tokenColor('--signal-gaunt', '#F2A63C');
   const cTally = tokenColor('--signal-tally', '#D6574C');
   const cCinder = tokenColor('--signal-cinder', '#58B4E8');
+  const cStare = tokenColor('--signal-stare', '#8FE3C8');
 
   const reducedMotion =
     typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -140,10 +141,10 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
       if (e.type === 'tell' && e.visible) {
         if (e.entity === 'GAUNT') gauntFlickerUntil = nowSec + 0.36; // two 180ms blinks
         if (e.entity === 'TALLY') tallyGlowUntil = nowSec + 1.0; // one red beat
-        if (e.entity === 'CINDER' || e.entity === 'GAUNT') {
+        if (e.entity === 'CINDER' || e.entity === 'GAUNT' || e.entity === 'STARE') {
           const slot = eventLights.find((s) => s.until <= nowSec) ?? eventLights[0];
           slot.light.visible = true;
-          slot.light.color.set(e.entity === 'CINDER' ? cCinder : cGaunt);
+          slot.light.color.set(e.entity === 'CINDER' ? cCinder : e.entity === 'GAUNT' ? cGaunt : cStare);
           slot.light.position.set(sim.player.x, 2.2, sim.player.z + 2.5);
           slot.until = nowSec + 2.0;
         }
@@ -161,8 +162,10 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
     const gaunt = sim.entities.find((e) => e.kind === 'GAUNT');
     const murmur = sim.entities.find((e) => e.kind === 'MURMUR');
     const cinder = sim.entities.find((e) => e.kind === 'CINDER');
+    const stare = sim.entities.find((e) => e.kind === 'STARE');
     const gauntLive = !!gaunt && (gaunt.phase === 'TELL' || gaunt.phase === 'SWEEP');
     const cinderLive = !!cinder && (cinder.phase === 'TELL' || cinder.phase === 'BLACKOUT');
+    const stareLive = !!stare && (stare.phase === 'TELL' || stare.phase === 'ACTIVE');
 
     lantern.distance = lanternRadius(sim.oil) * preset.lanternScale;
     let intensity = 2.6 + 1.8 * sim.oil;
@@ -175,6 +178,8 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
       }
     } else if (cinderLive) {
       scratchColor.lerp(cinderColor, 0.45); // spectral blue wash
+    } else if (stareLive) {
+      scratchColor.set(cStare); // Wave 2: spectral jade — STARE owns it, steady (fair)
     }
     if (murmur && murmur.phase === 'HUNT' && murmur.dist < 5) {
       // MURMUR is hueless by design: its channel is luminance only — the

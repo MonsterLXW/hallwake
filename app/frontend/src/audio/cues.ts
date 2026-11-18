@@ -4,14 +4,14 @@
 // tell has its own voice, and every recipe survives a JSON round-trip —
 // which is what keeps the audio layer replaceable and testable headless.
 //
-// Bus names mirror the architecture graph exactly:
-//   ambience | door | gaunt | murmur | tally | cinder  -> masterGain
+// Bus names mirror the architecture graph, extended by the Wave 2 roster:
+//   ambience | door | gaunt | murmur | tally | cinder | stare | grip -> masterGain
 // Gains are staged low (bus gain x layer gain stays well under 1.0) so the
 // master compressor is a safety net, not a mixer crutch.
 
 import type { EntityKind, EventType } from '../core/types';
 
-export type BusName = 'ambience' | 'door' | 'gaunt' | 'murmur' | 'tally' | 'cinder';
+export type BusName = 'ambience' | 'door' | 'gaunt' | 'murmur' | 'tally' | 'cinder' | 'stare' | 'grip';
 
 export type OscKind = 'sine' | 'square' | 'sawtooth' | 'triangle' | 'noise';
 
@@ -179,6 +179,26 @@ export const TELL_CUES: Record<EntityKind, CueRecipe> = {
       // rising hiss: sawtooth sweep up + noise bed
       { osc: 'sawtooth', freqFrom: 120, freqTo: 420, dur: 1.4, attack: 0.4, gain: 0.12, filter: { type: 'highpass', from: 300, to: 800, q: 0.8 } },
       { osc: 'noise', freqFrom: 0, freqTo: 0, dur: 1.4, attack: 0.5, gain: 0.16, filter: { type: 'highpass', from: 1800, to: 3600, q: 1.2 } },
+    ],
+  },
+  // --- Wave 2 tell voices (features.md) ---
+  STARE: {
+    bus: 'stare',
+    layers: [
+      // the chime: two cold bells a third apart + a high shimmer — nothing
+      // else in the corridor rings like this, so it is learnable by ear
+      { osc: 'sine', freqFrom: 1046, freqTo: 1046, dur: 0.9, attack: 0.01, gain: 0.2 },
+      { osc: 'sine', freqFrom: 1318, freqTo: 1318, dur: 1.1, attack: 0.06, gain: 0.14 },
+      { osc: 'noise', freqFrom: 0, freqTo: 0, dur: 0.7, attack: 0.15, gain: 0.07, filter: { type: 'highpass', from: 3200, to: 5200, q: 1.4 } },
+    ],
+  },
+  GRIP: {
+    bus: 'grip',
+    layers: [
+      // the drag-thud: a low groan plus knuckles on plaster — heavy, slow,
+      // unmistakably a thing that is coming down the corridor after you
+      { osc: 'sawtooth', freqFrom: 70, freqTo: 46, dur: 1.2, attack: 0.05, gain: 0.26, filter: { type: 'lowpass', from: 320, to: 120, q: 1.1 }, tremoloHz: 2.6, tremoloDepth: 0.4 },
+      { osc: 'noise', freqFrom: 0, freqTo: 0, dur: 0.8, attack: 0.02, gain: 0.22, filter: { type: 'lowpass', from: 900, to: 240, q: 0.9 } },
     ],
   },
 };

@@ -1,5 +1,5 @@
 // HALLWAKE — entity mesh gate (architecture.md §3/§5, design-brief §3/§7).
-// The four factories must be pure builders: detached groups, <= 12
+// The six factories must be pure builders: detached groups, <= 12
 // primitives each (the 24-draw entity reserve in budget.ts), ZERO lights
 // (lighting is the scene budget's job), bounded triangles, faithful FSM
 // phase behaviour, and deterministic output (same inputs -> same state).
@@ -7,12 +7,14 @@
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import type { CinderState, GauntState, MurmurState, SimEvent, TallyState } from '../../core/types';
+import type { CinderState, GauntState, GripState, MurmurState, SimEvent, StareState, TallyState } from '../../core/types';
 import { makeRoomState } from '../../core/sim';
 import { buildGaunt } from '../entities/gaunt';
 import { buildMurmur } from '../entities/murmur';
 import { buildTally } from '../entities/tally';
 import { buildCinder } from '../entities/cinder';
+import { buildStare } from '../entities/stare';
+import { buildGrip } from '../entities/grip';
 import { flickerEnvelope, mountEntities, numeralBeat, tellLightState } from '../entities/fx';
 
 interface PaintImage {
@@ -104,6 +106,20 @@ const cinderState = (phase: CinderState['phase'], blackoutCount = 0): CinderStat
   progress: 0,
   blackoutCount,
 });
+const stareState = (phase: StareState['phase'], stareTicks = 0): StareState => ({
+  kind: 'STARE',
+  phase,
+  x: 12.8,
+  z: 5.5,
+  stareTicks,
+});
+const gripState = (phase: GripState['phase'], dist = 4): GripState => ({
+  kind: 'GRIP',
+  phase,
+  x: 5,
+  z: 5,
+  dist,
+});
 
 describe('factory contracts (pure builders, inside the entity reserve)', () => {
   const builds: Array<
@@ -113,6 +129,8 @@ describe('factory contracts (pure builders, inside the entity reserve)', () => {
     ['MURMUR', buildMurmur, 4],
     ['TALLY', () => buildTally(8), 5],
     ['CINDER', buildCinder, 6],
+    ['STARE', buildStare, 3],
+    ['GRIP', buildGrip, 6],
   ];
 
   for (const [name, build, expected] of builds) {
@@ -198,6 +216,46 @@ describe('FSM phase fidelity (never invent behaviour the sim lacks)', () => {
     const inner = v.group.children[1] as THREE.Mesh;
     expect(inner.visible).toBe(false); // one sconce down = one flame layer down
     v.update(cinderState('BANISHED'), 3);
+    expect(v.group.visible).toBe(false);
+    v.dispose();
+  });
+
+  it('STARE: hidden in IDLE, manifest in TELL/ACTIVE, fades out in DEPARTED, gone when BANISHED', () => {
+    const v = buildStare();
+    v.update(stareState('IDLE'), 0);
+    expect(v.group.visible).toBe(false);
+    v.update(stareState('TELL'), 1);
+    expect(v.group.visible).toBe(true);
+    v.update(stareState('ACTIVE'), 2);
+    expect(v.group.visible).toBe(true);
+    // the stare meter: more consecutive looking ticks = tighter, brighter glow
+    const glowDim = (v.group.children[0] as THREE.Mesh).material as THREE.MeshBasicMaterial;
+    const dim = glowDim.opacity;
+    v.update(stareState('ACTIVE', 45), 2.5);
+    expect(glowDim.opacity).toBeGreaterThan(dim);
+    v.update(stareState('DEPARTED'), 3);
+    expect(v.group.visible).toBe(true); // mid-fade
+    v.update(stareState('DEPARTED'), 4);
+    expect(v.group.visible).toBe(false); // fade complete
+    v.update(stareState('BANISHED'), 5);
+    expect(v.group.visible).toBe(false);
+    v.dispose();
+  });
+
+  it('GRIP: lurches while HUNT, dead still while FROZEN, gone when BANISHED', () => {
+    const v = buildGrip();
+    v.update(gripState('HUNT'), 1);
+    expect(v.group.visible).toBe(true);
+    const torso = v.group.children[0] as THREE.Mesh;
+    const huntY = torso.position.y;
+    v.update(gripState('HUNT'), 1.31);
+    const huntY2 = torso.position.y;
+    v.update(gripState('FROZEN'), 2);
+    const frozenY = torso.position.y;
+    v.update(gripState('FROZEN'), 9.7);
+    expect(torso.position.y).toBe(frozenY); // frozen = no motion at all
+    expect(huntY).not.toBe(huntY2); // hunting = deterministic lurch
+    v.update(gripState('BANISHED'), 10);
     expect(v.group.visible).toBe(false);
     v.dispose();
   });

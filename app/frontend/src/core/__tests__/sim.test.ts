@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { createInitialState, makeRoomState, stepSim } from '../sim';
+import { createInitialState, makeRoomState, stepSim, PITCH_LIMIT } from '../sim';
 import type { Frame, ItemType, SimState } from '../types';
 import { TRACES } from './traces';
 
@@ -237,6 +237,84 @@ describe('Wave 1: loot, coins, locked doors, closets, death-saves', () => {
     expect(s.deaths).toBe(1);
     expect(s.inv).toEqual(['FLASK']);
     expect(s.coins).toBe(7);
+  });
+});
+
+describe('Wave 2: STARE + GRIP through stepSim', () => {
+  const NOOP: Frame = { mx: 0, mz: 0, yawD: 0, interact: false };
+  const move = (n: number, mx: number, mz: number): Frame[] =>
+    Array.from({ length: n }, () => ({ mx, mz, yawD: 0, interact: false }));
+  // bearing from ENTRY (7,1.5) to STARE's door-6 perch (12.8,5.5)
+  const YAW_AT_STARE_6 = 0.9670469933974603;
+
+  it('the sim owns pitch: frame pitchD accumulates and clamps at PITCH_LIMIT', () => {
+    let s = makeRoomState(1, 1);
+    s = stepSim(s, { mx: 0, mz: 0, yawD: 0, pitchD: 5, interact: false });
+    expect(s.player.pitch).toBe(PITCH_LIMIT);
+    s = stepSim(s, { mx: 0, mz: 0, yawD: 0, pitchD: -5, interact: false });
+    expect(s.player.pitch).toBe(-PITCH_LIMIT);
+    // a frame without pitchD holds the view (traces stay valid)
+    s = stepSim(s, NOOP);
+    expect(s.player.pitch).toBe(-PITCH_LIMIT);
+  });
+
+  it('GRIP rooms start with lit sconces (the stand-your-ground counter)', () => {
+    expect(makeRoomState(8, 1).sconces).toEqual([true, true, true]);
+    expect(makeRoomState(6, 1).sconces).toEqual([false, false, false]); // STARE room: no sconce play
+  });
+
+  it('GRIP freezes while the player holds a lit sconce and never closes in', () => {
+    let s = makeRoomState(8, 1);
+    // lounge lane: 30 NE to x~7.49, then north to the middle sconce at (7,6)
+    for (const f of [...move(30, 0.5, 1), ...move(96, 0, 1)]) s = stepSim(s, f);
+    expect(Math.hypot(s.player.x - 7, s.player.z - 6)).toBeLessThanOrEqual(1.4);
+    for (let i = 0; i < 300; i++) s = stepSim(s, NOOP);
+    expect(s.alive).toBe(true);
+    const g = s.entities.find((e) => e.kind === 'GRIP');
+    expect(g!.phase).toBe('FROZEN');
+  });
+
+  it('WARD banishes STARE at the killing stare: terminal phase, banish event', () => {
+    let s = { ...makeRoomState(6, 1), player: { ...makeRoomState(6, 1).player, yaw: YAW_AT_STARE_6 }, inv: ['WARD'] as ItemType[] };
+    let banished = false;
+    for (let i = 0; i < 260 && !banished; i++) {
+      s = stepSim(s, NOOP);
+      banished = s.events.some((e) => e.type === 'banish' && e.entity === 'STARE');
+    }
+    expect(banished).toBe(true);
+    expect(s.alive).toBe(true);
+    expect(s.inv).toEqual([]);
+    const st = s.entities.find((e) => e.kind === 'STARE');
+    expect(st!.phase).toBe('BANISHED');
+    // still staring afterwards is harmless — the eye is gone
+    for (let i = 0; i < 200; i++) s = stepSim(s, NOOP);
+    expect(s.alive).toBe(true);
+  });
+
+  it('TONIC on STARE ends the watch (DEPARTED) and grants grace', () => {
+    let s = { ...makeRoomState(6, 1), player: { ...makeRoomState(6, 1).player, yaw: YAW_AT_STARE_6 }, inv: ['TONIC'] as ItemType[] };
+    for (let i = 0; i < 230; i++) s = stepSim(s, NOOP); // doomed stare at 226 -> saved
+    expect(s.alive).toBe(true);
+    expect(s.inv).toEqual([]);
+    const st = s.entities.find((e) => e.kind === 'STARE');
+    expect(st!.phase).toBe('DEPARTED');
+    expect(s.invuln).toBeGreaterThan(0);
+  });
+
+  it('WARD banishes GRIP; a TONIC shock shoves it 3 m back instead', () => {
+    let s = { ...makeRoomState(8, 1), inv: ['WARD'] as ItemType[] };
+    for (let i = 0; i < 400 && s.alive; i++) s = stepSim(s, NOOP); // standing still: doomed at 327
+    expect(s.alive).toBe(true);
+    const g = s.entities.find((e) => e.kind === 'GRIP');
+    expect(g!.phase).toBe('BANISHED');
+
+    let t = { ...makeRoomState(8, 1), inv: ['TONIC'] as ItemType[] };
+    for (let i = 0; i < 330; i++) t = stepSim(t, NOOP); // save at 327
+    expect(t.alive).toBe(true);
+    expect(t.inv).toEqual([]);
+    const tg = t.entities.find((e) => e.kind === 'GRIP')!;
+    const dist = Math.hypot(tg.x - t.player.x, tg.z - t.player.z);
+    expect(dist).toBeGreaterThan(2.5); // shoved back, not banished
   });
 });
 

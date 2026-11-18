@@ -40,6 +40,10 @@ const tap = (): Frame => ({ mx: 0, mz: 0, yawD: 0, interact: true });
 // atan2(1-7, 9-1.5) = atan2(-6, 7.5) = -0.6747434853607526 rad.
 const YAW_AT_MURMUR_10 = -0.6747434853607526;
 
+// yaw that points from entry (7,1.5) at STARE's door-6 perch (12.8,5.5):
+// atan2(5.8, 4) = 0.9670469933974603 rad — dead centre of the 30 deg cone.
+const YAW_AT_STARE_6 = 0.9670469933974603;
+
 export const TRACES: Trace[] = [
   {
     name: 'gaunt7_survive',
@@ -229,6 +233,77 @@ export const TRACES: Trace[] = [
       phases: { CINDER: 'BANISHED', GAUNT: 'SURVIVED' },
       deaths: 0,
       finished: true,
+    },
+  },
+  {
+    name: 'stare6_lookaway_survive',
+    // Wave 2: walk the lane north with the view forward (yaw 0). STARE at
+    // (12.8,5.5) is 55 deg off the view axis the whole way — never inside
+    // the 30 deg cone, so the 45-tick grace never burns. STARE: tell 60,
+    // look-check opens 180, DEPARTED at 660. 700 ticks:
+    // oil = 1 - 700/5400 = 0.870370 -> band 17.
+    start: { door: 6, oil: 1.0 },
+    frames: [...move(200, 0, 1), ...idle(500)], // 700 ticks
+    expect: {
+      alive: true,
+      door: 6,
+      oilBand: 17,
+      phases: { STARE: 'DEPARTED' },
+      deaths: 0,
+    },
+  },
+  {
+    name: 'stare6_lookat_death',
+    // Wave 2: same room, but the view is pinned on the eye (yaw = bearing).
+    // The check opens at roomTick 180; 46 consecutive looking ticks burn
+    // the 45-tick grace -> death at roomTick 226. Freeze 90 -> respawn at
+    // checkpoint 5 at tick 316 with oil 0.6, then 4 drain ticks:
+    // 0.6 - 4/5400 = 0.599259 -> band 11. TALLY tell (roomTick 60) not yet.
+    start: { door: 6, oil: 1.0, yaw: YAW_AT_STARE_6 },
+    frames: idle(320),
+    expect: {
+      alive: true,
+      door: 5,
+      oilBand: 11,
+      phases: { TALLY: 'IDLE' },
+      deaths: 1,
+      checkpoint: 5,
+    },
+  },
+  {
+    name: 'grip8_reach_exit_survive',
+    // Wave 2: GRIP spawns (1,9) on entry. Run the lounge lane (x ~7.49 —
+    // a straight x=7 walk gets pinned on the armchair collider at z=5.7):
+    // 30 ticks NE to the lane, 230 north, z clamps at 9.8 by tick ~230,
+    // tap at 261 opens the exit (0.53 m from the door). Pursuit arithmetic:
+    // closest approach 1.515 m at tick 261 (GRIP at ~(6.60,8.58)) — over the
+    // 0.9 m kill radius, so the porter who runs makes it. Oil at the tap:
+    // 1 - 261/5400 = 0.951667 -> band 19. Door 9 entities rebuilt: CINDER IDLE.
+    start: { door: 8, oil: 1.0 },
+    frames: [...move(30, 0.5, 1), ...move(230, 0, 1), tap()], // 261 ticks
+    expect: {
+      alive: true,
+      door: 9,
+      oilBand: 19,
+      phases: { CINDER: 'IDLE' },
+      deaths: 0,
+    },
+  },
+  {
+    name: 'grip8_too_slow_death',
+    // Wave 2: stand still at ENTRY. dist 9.6047 shrinks 1.6/60 per tick:
+    // k=326 -> 0.911 (safe), k=327 -> 0.885 < 0.9 -> death at roomTick 327.
+    // Freeze 90 -> respawn at checkpoint 5 at tick 417, oil 0.6, then 3
+    // drain ticks: 0.6 - 3/5400 = 0.599444 -> band 11.
+    start: { door: 8, oil: 1.0 },
+    frames: idle(420),
+    expect: {
+      alive: true,
+      door: 5,
+      oilBand: 11,
+      phases: { TALLY: 'IDLE' },
+      deaths: 1,
+      checkpoint: 5,
     },
   },
 ];

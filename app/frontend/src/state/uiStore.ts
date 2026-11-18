@@ -67,6 +67,7 @@ const INITIAL_HUD: HudSnapshot = {
   coins: 0,
   locked: false,
   hidden: false,
+  stareAt: false,
 };
 
 export const useUIStore = create<UIState>((set, get) => ({
