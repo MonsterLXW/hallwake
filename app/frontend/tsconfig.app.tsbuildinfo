@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/core/entities.ts","./src/core/oil.ts","./src/core/schedule.ts","./src/core/scoring.ts","./src/core/sim.ts","./src/core/types.ts","./src/core/__tests__/entities.test.ts","./src/core/__tests__/schedule.test.ts","./src/core/__tests__/sim.test.ts","./src/core/__tests__/traces.ts"],"version":"5.9.3"}
