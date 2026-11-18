@@ -8,7 +8,7 @@
 import { useEffect } from 'react';
 import { useUIStore } from '../state/uiStore';
 import { KEEPER_NAME, shopStock } from '../core/shop';
-import { ItemGlyph } from './Hud';
+import { CoinGlyph, ItemGlyph } from './Hud';
 import type { ItemType } from '../core/types';
 
 const ITEM_LABEL: Record<ItemType, { name: string; blurb: string }> = {
@@ -206,7 +206,16 @@ export default function ShopScreen({ onBuy, onClose }: { onBuy(i: number): void;
                   whiteSpace: 'nowrap',
                 }}
               >
-                {isSold ? 'sold' : packFull ? 'pack full' : purseLight ? `${o.price} · purse light` : `${o.price} coins`}
+                {isSold ? (
+                  'sold'
+                ) : packFull ? (
+                  'pack full'
+                ) : (
+                  <>
+                    {o.price} <CoinGlyph />
+                    {purseLight ? ' · purse light' : ''}
+                  </>
+                )}
               </span>
             </button>
           );
@@ -231,7 +240,9 @@ export default function ShopScreen({ onBuy, onClose }: { onBuy(i: number): void;
           <span>
             Keys 1-{offers.length} buy · [Enter] move on · the corridor waits
           </span>
-          <span aria-label={`${coins} coins in purse`}>Purse {coins}</span>
+          <span aria-label={`${coins} coins in purse`}>
+            Purse <CoinGlyph /> {coins}
+          </span>
         </div>
       </div>
     </div>

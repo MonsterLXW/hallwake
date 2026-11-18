@@ -71,6 +71,27 @@ describe('per-room structure', () => {
     expect(a.doorQuad).toEqual(b.doorQuad);
   });
 
+  it('loot crate markers ride their own draw; every room still <= 7', () => {
+    // Item art pass: the loot pile is a textured crate marker with its own
+    // draw. Loot doors never carry a closet or fake door (schedule table),
+    // so 6 base + 1 marker stays inside the per-room cap.
+    let lootPlans = 0;
+    for (const def of SCHEDULE) {
+      for (const variant of ['A', 'B'] as const) {
+        const plan = roomPlanFor({ ...def, variant });
+        expect(plan.drawCalls).toBeLessThanOrEqual(7);
+        if (def.loot) {
+          lootPlans++;
+          expect(plan.lootItem).toBe(def.loot);
+          expect(plan.drawCalls).toBe(7); // 6 base + the crate marker
+        } else {
+          expect(plan.lootItem).toBeNull();
+        }
+      }
+    }
+    expect(lootPlans).toBe(16); // doors 2,4,6,8,11,14,17,23 x both variants
+  });
+
   it('door 24 (finale) preloads no next room', () => {
     const last = scenePlanFromRoom(doorDef(24), 'mid');
     const mid = scenePlanFromRoom(doorDef(12), 'mid');

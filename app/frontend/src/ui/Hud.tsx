@@ -14,10 +14,24 @@ import Minimap from './Minimap';
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
-// Wave 1 kit glyphs: stroked bone marks, each a distinct silhouette so the
-// slot reads at a glance (and never relies on color alone). Shared with the
-// Wave 4 vendor screen (ShopScreen).
-export function ItemGlyph({ item }: { item: ItemType }) {
+// kit tallies for the slot count badges and the screen-reader summary
+function itemCounts(inv: ItemType[]): Map<ItemType, number> {
+  const m = new Map<ItemType, number>();
+  for (const it of inv) m.set(it, (m.get(it) ?? 0) + 1);
+  return m;
+}
+function kitSummary(inv: ItemType[]): string {
+  if (!inv.length) return 'empty';
+  return [...itemCounts(inv).entries()].map(([k, n]) => (n > 1 ? `${k} times ${n}` : k)).join(', ');
+}
+
+// Wave 1 kit glyphs: stroked bone marks drawn to the SAME silhouettes as the
+// procedural canvas icons in render/textures.ts (skeleton key with ring bow
+// and cut teeth; bandaged tonic bottle; corked round-bottom flask; eyeless
+// ward charm), so the kit bar, the vendor, the [E] prompt and the 3D loot
+// crate all speak one picture. Never color-alone — shape carries the meaning.
+// Shared with the Wave 4 vendor screen (ShopScreen).
+export function ItemGlyph({ item, size = 22 }: { item: ItemType; size?: number }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -25,27 +39,52 @@ export function ItemGlyph({ item }: { item: ItemType }) {
       stroke="var(--color-ink)"
       strokeWidth="1.8"
       aria-hidden="true"
-      style={{ display: 'block', width: '22px', height: '22px' }}
+      style={{ display: 'block', width: `${size}px`, height: `${size}px` }}
     >
       {item === 'WARD' && (
         <g>
           <path d="M12 2 20 6v7c0 5-4 8-8 9-4-1-8-4-8-9V6Z" />
-          <path d="M12 8v8M8 12h8" />
+          <path d="M12 7v9M8.5 11h7M9.5 16h5" />
         </g>
       )}
       {item === 'TONIC' && (
         <g>
-          <path d="M10 2h4M11 2v5l-3 4v9a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-9l-3-4V2" />
-          <path d="M8 14h8" />
+          <path d="M10 2h4M11 2v4.5L8 9v11a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9l-3-2.5V2" />
+          <path d="M8 13h8M12 10.5v6" />
         </g>
       )}
-      {item === 'PICK' && <path d="M4 20 16 8a4 4 0 0 1 4-4M16 8l3 3M4 20l4-1" />}
+      {item === 'PICK' && (
+        <g>
+          <circle cx="7.5" cy="7.5" r="4.5" />
+          <path d="M10.5 10.5 21 21" />
+          <path d="M16.5 16.5 14 19M19.5 19.5 17 22" />
+        </g>
+      )}
       {item === 'FLASK' && (
         <g>
-          <path d="M9 3h6M11 3v4L6 17a2 2 0 0 0 2 3h8a2 2 0 0 0 2-3L13 7V3" />
-          <path d="M8 15h8" />
+          <path d="M9.5 2.5h5" />
+          <path d="M11 2.5v6M13 2.5v6" />
+          <circle cx="12" cy="15" r="6.5" />
         </g>
       )}
+    </svg>
+  );
+}
+
+// The porter's coin: disc + stamped square centre — same mark as the canvas
+// COIN stencil. Used on the purse line and every shop price.
+export function CoinGlyph({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="var(--color-ink)"
+      strokeWidth="1.8"
+      aria-hidden="true"
+      style={{ display: 'inline-block', width: `${size}px`, height: `${size}px`, verticalAlign: '-3px' }}
+    >
+      <circle cx="12" cy="12" r="9" />
+      <rect x="8.5" y="8.5" width="7" height="7" />
     </svg>
   );
 }
@@ -111,6 +150,7 @@ export default function Hud() {
   const critical = hud.oil < 0.2;
   const oilColor = hud.oil >= 0.6 ? 'var(--oil-high)' : critical ? 'var(--oil-critical)' : 'var(--oil-low)';
   const tallyTell = hud.tellKind === 'TALLY';
+  const kitCounts = itemCounts(hud.inv);
 
   // last three doors opened, as ruled ledger ticks
   const ticks: number[] = [];
@@ -217,7 +257,7 @@ export default function Hud() {
         >
           <span>Purse</span>
           <span style={{ color: 'var(--color-ink)' }} aria-label={`${hud.coins} coins`}>
-            {hud.coins}
+            <CoinGlyph /> {hud.coins}
           </span>
         </div>
         {/* Wave 3: XP ledger — the numeral plus three level pips (one per
@@ -369,6 +409,9 @@ export default function Hud() {
             left: '50%',
             top: 'calc(50% + var(--space-6))',
             transform: 'translateX(-50%)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-2)',
             fontFamily: 'var(--font-mono)',
             fontVariantNumeric: 'tabular-nums',
             fontSize: 'var(--text-xs)',
@@ -380,7 +423,12 @@ export default function Hud() {
             whiteSpace: 'nowrap',
           }}
         >
-          [E] {hud.interactPrompt}
+          {/* item art pass: when a PICK in the kit will open this exit, the
+              key icon rides the prompt — the door says "key works here" */}
+          {hud.pickOpens && hud.interactPrompt.startsWith('OPEN') && <ItemGlyph item="PICK" size={18} />}
+          <span>
+            [E] {hud.interactPrompt}
+          </span>
         </div>
       )}
 
@@ -437,10 +485,13 @@ export default function Hud() {
         </div>
       )}
 
-      {/* Wave 1: kit strip — four ruled slots, key numbers, bone glyphs */}
+      {/* Item art pass: kit strip — four ruled slots. Each occupied slot is
+          the item's icon (not a number) plus a count badge when the pack
+          carries duplicates; an empty slot is a dim outlined well. The key
+          number stays as a tiny corner label for the keyboard affordance. */}
       <div
         role="status"
-        aria-label={`kit: ${hud.inv.length ? hud.inv.join(', ') : 'empty'}`}
+        aria-label={`kit: ${kitSummary(hud.inv)}`}
         style={{
           position: 'absolute',
           left: '50%',
@@ -453,9 +504,11 @@ export default function Hud() {
       >
         {[0, 1, 2, 3].map((slot) => {
           const item = hud.inv[slot];
+          const count = item ? kitCounts.get(item) ?? 1 : 1;
           return (
             <div
               key={slot}
+              aria-label={item ? `slot ${slot + 1}: ${item}${count > 1 ? ` times ${count}` : ''}` : `slot ${slot + 1}: empty`}
               style={{
                 width: 'var(--hud-row-h)',
                 height: 'var(--hud-row-h)',
@@ -467,7 +520,33 @@ export default function Hud() {
                 opacity: item ? 1 : 0.35,
               }}
             >
-              {item ? <ItemGlyph item={item} /> : <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-2xs)', color: 'var(--color-ink-muted)' }}>·</span>}
+              {item ? (
+                <ItemGlyph item={item} />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: '22px',
+                    height: '22px',
+                    border: '1px solid var(--color-rule-strong)',
+                  }}
+                />
+              )}
+              {item && count > 1 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    bottom: '2px',
+                    right: '4px',
+                    fontFamily: 'var(--font-mono)',
+                    fontVariantNumeric: 'tabular-nums',
+                    fontSize: 'var(--text-2xs)',
+                    color: 'var(--color-ink-secondary)',
+                  }}
+                >
+                  ×{count}
+                </span>
+              )}
               <span
                 aria-hidden="true"
                 style={{

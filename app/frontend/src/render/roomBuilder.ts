@@ -13,11 +13,13 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Archetype, DoorDef } from '../core/schedule';
 import { FAKE_DOOR_POS, archetypeGeom, sconcePositions } from '../core/schedule';
+import type { ItemType } from '../core/types';
 import {
   ATLAS_CELLS,
   atlasCellUV,
   getAtlas,
   getEmissiveTexture,
+  getLootMarkerTexture,
   getNumeralTexture,
   type AtlasCell,
 } from './textures';
@@ -62,7 +64,8 @@ export interface RoomPlan {
   doorQuad: QuadSpec;
   fakeDoorQuad: QuadSpec | null;
   closetQuad: QuadSpec | null; // Wave 1: openable closet door panel
-  lootQuad: QuadSpec | null; // Wave 1: loot glint (rides the sconce instance draw)
+  lootQuad: QuadSpec | null; // Wave 1: loot pile position
+  lootItem: ItemType | null; // item art pass: which icon the pile's crate stamps
   secretQuad: QuadSpec | null; // Wave 4: the odd sconce marking the hidden alcove
   locked: boolean; // Wave 1: exit door stenciled with a padlock
   drawCalls: number;
@@ -180,9 +183,12 @@ export function roomPlanFor(def: DoorDef): RoomPlan {
       : { x: def.closet.x1 - 0.02, y: 1.1, z: cz, w: def.closet.z1 - def.closet.z0, h: 2.2, rotY: Math.PI / 2 };
     aoDiscs.push({ x: (def.closet.x0 + def.closet.x1) / 2, z: cz, r: 0.9 });
   }
-  // Wave 1: loot glint — a small emissive quad at the authored loot anchor.
+  // Item art pass: the loot pile is a small nailed-crate marker stamped with
+  // the pile's item icon, at the authored loot anchor. It gets its own
+  // instanced draw — loot rooms never carry a closet or fake door (schedule
+  // invariant), so 6 base + 1 marker stays inside the <=7 per-room cap.
   const lootQuad: QuadSpec | null = def.loot
-    ? { x: geom.loot.x, y: 0.55, z: geom.loot.z, w: 0.45, h: 0.45, rotY: 0 }
+    ? { x: geom.loot.x, y: 0.42, z: geom.loot.z, w: 0.6, h: 0.6, rotY: 0 }
     : null;
   // Wave 4: the hidden alcove's marked sconce — same wall-quad mapping as a
   // sconce, riding the same instanced draw (scene.ts paints it cold bone so
@@ -197,8 +203,8 @@ export function roomPlanFor(def: DoorDef): RoomPlan {
     props.length * 12 +
     aoDiscs.length * DISC_SEG +
     sconces.length * 2 +
-    (lootQuad ? 2 : 0) + // loot glint rides the sconce instance draw
-    (secretQuad ? 2 : 0) + // Wave 4: the odd sconce rides it too — no new draw
+    (lootQuad ? 2 : 0) + // loot crate marker (own draw, 2 tris)
+    (secretQuad ? 2 : 0) + // Wave 4: the odd sconce rides the sconce draw — no new draw
     alcoves.length * 2 +
     2 + // door
     (hasFake ? 2 : 0) +
@@ -208,11 +214,12 @@ export function roomPlanFor(def: DoorDef): RoomPlan {
     1 + // StaticMerged
     1 + // PropsMerged
     1 + // DoorMesh
-    1 + // sconce instances (+ loot glint instance, same draw)
+    1 + // sconce instances (+ the odd secret sconce, same draw)
     1 + // alcove instances
     1 + // blob-AO instances
     (hasFake ? 1 : 0) +
-    (closetQuad ? 1 : 0); // closet panel (GAUNT doors only: 6 base + 1 = 7)
+    (closetQuad ? 1 : 0) + // closet panel (GAUNT doors only: 6 base + 1 = 7)
+    (lootQuad ? 1 : 0); // loot crate (loot doors never carry closet/fake: 6 + 1 = 7)
 
   return {
     door: def.door,
@@ -227,6 +234,7 @@ export function roomPlanFor(def: DoorDef): RoomPlan {
     fakeDoorQuad: hasFake ? { x: FAKE_DOOR_POS.x, y: 1.05, z: 9.72, w: DOOR_GAP, h: 2.1, rotY: Math.PI } : null,
     closetQuad,
     lootQuad,
+    lootItem: def.loot ?? null,
     secretQuad,
     locked: def.locked === true,
     drawCalls,
@@ -308,7 +316,8 @@ export interface RoomMeshes {
   aoInst: THREE.InstancedMesh;
   closetPanel: THREE.InstancedMesh | null; // Wave 1: openable closet door
   closetQuad: QuadSpec | null; // base transform for the panel toggle
-  lootIndex: number; // sconceInst instance index of the loot glint, -1 if none
+  lootMesh: THREE.Mesh | null; // item art pass: crate marker with the pile's icon
+  lootMat: THREE.MeshBasicMaterial | null; // per-room: texture depends on the item
   secretIndex: number; // Wave 4: sconceInst index of the hidden-alcove sconce, -1 if none
 }
 
@@ -374,14 +383,13 @@ export function buildRoomGroup(plan: RoomPlan, quality: Quality, mats: SharedMat
     group.add(fakeDoorMesh);
   }
 
-  // --- Sconces: instanced emissive quads (not lights — budget §3). Wave 1:
-  // the loot glint rides this same instanced draw as one extra instance. ---
-  const lootIndex = plan.lootQuad ? plan.sconceQuads.length : -1;
-  const secretIndex = plan.secretQuad ? plan.sconceQuads.length + (lootIndex >= 0 ? 1 : 0) : -1;
+  // --- Sconces: instanced emissive quads (not lights — budget §3). Wave 4:
+  // the odd secret sconce rides this same instanced draw as one instance. ---
+  const secretIndex = plan.secretQuad ? plan.sconceQuads.length : -1;
   const sconceInst = new THREE.InstancedMesh(
     new THREE.PlaneGeometry(1, 1),
     mats.sconceMat,
-    plan.sconceQuads.length + (lootIndex >= 0 ? 1 : 0) + (secretIndex >= 0 ? 1 : 0),
+    plan.sconceQuads.length + (secretIndex >= 0 ? 1 : 0),
   );
   plan.sconceQuads.forEach((q, i) => {
     dummy.position.set(q.x, q.y, q.z);
@@ -391,15 +399,6 @@ export function buildRoomGroup(plan: RoomPlan, quality: Quality, mats: SharedMat
     sconceInst.setMatrixAt(i, dummy.matrix);
     sconceInst.setColorAt(i, new THREE.Color(1, 1, 1));
   });
-  if (plan.lootQuad) {
-    const q = plan.lootQuad;
-    dummy.position.set(q.x, q.y, q.z);
-    dummy.rotation.set(0, q.rotY, 0);
-    dummy.scale.set(q.w, q.h, 1);
-    dummy.updateMatrix();
-    sconceInst.setMatrixAt(lootIndex, dummy.matrix);
-    sconceInst.setColorAt(lootIndex, new THREE.Color(1, 1, 1));
-  }
   if (plan.secretQuad && secretIndex >= 0) {
     const q = plan.secretQuad;
     dummy.position.set(q.x, q.y, q.z);
@@ -445,6 +444,26 @@ export function buildRoomGroup(plan: RoomPlan, quality: Quality, mats: SharedMat
     group.add(closetPanel);
   }
 
+  // --- Loot crate marker (item art pass): a small upright crate stamped
+  // with the pile's item icon — the pile reads as loot from across the room
+  // and as *which* loot up close. Its own draw (loot rooms carry no closet
+  // or fake door, so 6 base + 1 stays within the per-room cap). The scene
+  // hides it once the pile is taken. ---
+  let lootMesh: THREE.Mesh | null = null;
+  let lootMat: THREE.MeshBasicMaterial | null = null;
+  if (plan.lootQuad && plan.lootItem) {
+    const q = plan.lootQuad;
+    lootMat = new THREE.MeshBasicMaterial({
+      map: getLootMarkerTexture(plan.lootItem),
+      transparent: true,
+      side: THREE.DoubleSide,
+    });
+    lootMesh = new THREE.Mesh(new THREE.PlaneGeometry(q.w, q.h), lootMat);
+    lootMesh.position.set(q.x, q.y, q.z);
+    lootMesh.rotation.y = q.rotY;
+    group.add(lootMesh);
+  }
+
   // --- BlobAO: instanced dark discs under props (the "baked" contact) ---
   const aoGeo = new THREE.CircleGeometry(1, DISC_SEG);
   aoGeo.rotateX(-Math.PI / 2);
@@ -459,7 +478,7 @@ export function buildRoomGroup(plan: RoomPlan, quality: Quality, mats: SharedMat
   aoInst.instanceMatrix.needsUpdate = true;
   group.add(aoInst);
 
-  return { group, doorMat, fakeDoorMesh, sconceInst, aoInst, closetPanel, closetQuad: plan.closetQuad, lootIndex, secretIndex };
+  return { group, doorMat, fakeDoorMesh, sconceInst, aoInst, closetPanel, closetQuad: plan.closetQuad, lootMesh, lootMat, secretIndex };
 }
 
 export function disposeRoomGroup(room: RoomMeshes): void {
@@ -467,5 +486,6 @@ export function disposeRoomGroup(room: RoomMeshes): void {
     if (obj instanceof THREE.Mesh || obj instanceof THREE.InstancedMesh) obj.geometry.dispose();
   });
   room.doorMat.dispose();
+  if (room.lootMat) room.lootMat.dispose();
   room.group.clear();
 }

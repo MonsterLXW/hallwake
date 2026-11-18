@@ -71,6 +71,7 @@ const INITIAL_HUD: HudSnapshot = {
   inv: [],
   coins: 0,
   locked: false,
+  pickOpens: false,
   hidden: false,
   stareAt: false,
   xp: 0,

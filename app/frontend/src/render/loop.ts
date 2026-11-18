@@ -42,6 +42,7 @@ export interface HudSnapshot {
   inv: ItemType[];
   coins: number;
   locked: boolean; // current exit is locked and the kit has no PICK
+  pickOpens: boolean; // item art pass: exit is locked AND a PICK in the kit will open it
   hidden: boolean; // inside a closet
   // Wave 2: the view is inside STARE's cone right now (the LOOK AWAY plate)
   stareAt: boolean;
@@ -410,6 +411,7 @@ export function startLoop(deps: LoopDeps): LoopHandle {
         inv: [...sim.inv],
         coins: sim.coins,
         locked: doorDef(sim.door).locked === true && !sim.inv.includes('PICK'),
+        pickOpens: doorDef(sim.door).locked === true && sim.inv.includes('PICK'),
         hidden: sim.hidden,
         stareAt: !!stare && stare.phase === 'ACTIVE' && stareLooking(stare, sim.player),
         xp: sim.xp,

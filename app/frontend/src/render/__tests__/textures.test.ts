@@ -78,6 +78,10 @@ describe('texture cache', () => {
         tex.getAtlas(key === 'atlas@512' ? 'low' : 'mid');
       } else if (key.startsWith('numeral@')) {
         tex.getNumeralTexture(Number(key.split('@')[1]));
+      } else if (key.startsWith('item@')) {
+        tex.itemIconTexture(key.split('@')[1] as 'PICK' | 'TONIC' | 'FLASK' | 'WARD' | 'COIN');
+      } else if (key.startsWith('loot@')) {
+        tex.getLootMarkerTexture(key.split('@')[1] as 'PICK' | 'TONIC' | 'FLASK' | 'WARD');
       } else {
         tex.getEmissiveTexture(key.split('@')[1] as 'sconce' | 'alcove' | 'ao');
       }

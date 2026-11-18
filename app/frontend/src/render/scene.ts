@@ -123,7 +123,6 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
   const dimColor = new THREE.Color();
   const cinderColor = new THREE.Color(cCinder);
   const offColor = new THREE.Color(0x050507);
-  const lootColor = new THREE.Color(tokenColor('--color-accent', '#E3D7BC')); // bone = information
   const secretColor = new THREE.Color(tokenColor('--color-ink', '#EDE7DA')); // Wave 4: cold bone — an odd, unlit flame
   const scratchDummy = new THREE.Object3D();
 
@@ -199,15 +198,15 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality): SceneB
       litColor.set(cinderLive ? cCinder : cWarm);
       dimColor.set(cBone).multiplyScalar(0.5);
       for (let i = 0; i < room.sconceInst.count; i++) {
-        if (i === room.lootIndex || i === room.secretIndex) continue; // loot/secret have their own state
+        if (i === room.secretIndex) continue; // the secret sconce has its own state
         const lit = sim.sconces[i];
         room.sconceInst.setColorAt(i, lit ? (cinderLive ? cinderColor : litColor) : offColor);
       }
-      // Wave 1: loot glint — bone while the pile is there, dark once taken.
-      if (room.lootIndex >= 0) {
+      // Item art pass: the loot crate marker (stamped with the pile's item
+      // icon) stands while the pile is there, gone once taken.
+      if (room.lootMesh) {
         const def = doorDef(sim.door);
-        const avail = !!def.loot && !sim.lootTaken;
-        room.sconceInst.setColorAt(room.lootIndex, avail ? lootColor : offColor);
+        room.lootMesh.visible = !!def.loot && !sim.lootTaken;
       }
       // Wave 4: the hidden alcove's sconce — a cold bone flame among the warm
       // ones while the nook is unopened; dark once the porter found it.

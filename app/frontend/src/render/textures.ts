@@ -7,6 +7,7 @@
 // headless generation.
 
 import * as THREE from 'three';
+import type { ItemType } from '../core/types';
 import { QUALITY, type Quality } from './quality';
 
 // ---- minimal 2D context surface we rely on (tests stub exactly this) ----
@@ -24,13 +25,17 @@ export interface PaintCtx {
   font: string;
   textAlign: string;
   textBaseline: string;
-  // stroke path (padlock stencil on locked door numerals) — the headless
-  // test stub answers any method call, so these stay cheap
+  // stroke/fill paths (keyhole stencil on locked door numerals) — the
+  // headless test stub answers any method call, so these stay cheap
   strokeStyle: string;
   lineWidth: number;
   beginPath(): void;
   arc(x: number, y: number, r: number, a0: number, a1: number): void;
+  moveTo(x: number, y: number): void;
+  lineTo(x: number, y: number): void;
+  closePath(): void;
   stroke(): void;
+  fill(): void;
 }
 
 type RGB = [number, number, number];
@@ -238,8 +243,10 @@ export function atlasCellUV(cell: AtlasCell, quality: Quality): { u0: number; v0
 const NUMERAL_PX = 256;
 
 // Stenciled door numeral — painted-door presence (brief §4 signage voice).
-// locked=true stencils a small padlock under the numeral: the exit needs a
-// PICK (Wave 1), and the tell must read without any color (bone only).
+// locked=true stencils a keyhole under the numeral: the exit needs a PICK
+// (Wave 1), and the tell must read without any color (bone only). The
+// keyhole (round hole + tapered stem) is the one silhouette that says
+// "this opens with a key" at a glance, from across the room.
 export function getNumeralTexture(n: number, locked = false): THREE.Texture {
   const key = `numeral@${n}${locked ? '@lock' : ''}`;
   const hit = cache.get(key);
@@ -259,17 +266,24 @@ export function getNumeralTexture(n: number, locked = false): THREE.Texture {
   ctx.textBaseline = 'middle';
   ctx.fillText(String(n), NUMERAL_PX / 2, NUMERAL_PX * (locked ? 0.42 : 0.52));
   if (locked) {
-    // padlock stencil: shackle arc + body, bone strokes
+    // keyhole stencil: round hole + tapered stem, bone. The keyhole is the
+    // one mark that says "a key opens this" without any color or text.
     const cx = NUMERAL_PX / 2;
-    const by = NUMERAL_PX * 0.72;
+    const hy = NUMERAL_PX * 0.66;
     ctx.strokeStyle = `rgb(${p.bone[0] | 0},${p.bone[1] | 0},${p.bone[2] | 0})`;
-    ctx.lineWidth = 7;
+    ctx.lineWidth = 8;
     ctx.beginPath();
-    ctx.arc(cx, by, 22, Math.PI, 0);
+    ctx.arc(cx, hy, 16, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.fillRect(cx - 32, by, 64, 44);
-    ctx.fillStyle = `rgb(${p.bg[0] | 0},${p.bg[1] | 0},${p.bg[2] | 0})`;
-    ctx.fillRect(cx - 4, by + 14, 8, 18);
+    // tapered stem: a trapezoid widening downward, filled bone
+    ctx.fillStyle = `rgb(${p.bone[0] | 0},${p.bone[1] | 0},${p.bone[2] | 0})`;
+    ctx.beginPath();
+    ctx.moveTo(cx - 5, hy + 10);
+    ctx.lineTo(cx + 5, hy + 10);
+    ctx.lineTo(cx + 11, hy + 46);
+    ctx.lineTo(cx - 11, hy + 46);
+    ctx.closePath();
+    ctx.fill();
   }
   const tex = new THREE.CanvasTexture(canvas as unknown as HTMLCanvasElement);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -336,13 +350,204 @@ export function getEmissiveTexture(kind: EmissiveKind): THREE.Texture {
   return tex;
 }
 
+// ---- item icons: pixel-stencil kit marks (item art pass) -----------------
+// The user complaint this answers: "I can't tell a key from a bottle." Every
+// kit item gets ONE unmistakable silhouette, drawn from a 16x16 stencil map
+// at 4x scale (64px): '#' is bone, every other cell stays transparent. Pure
+// integer math — no Math.random, no fetch — and cached per kind. The same
+// stencils feed the 3D loot marker (nailed crate + stamped icon), so the
+// pile in the world and the slot in the kit bar speak the same picture.
+// Bone only: items are information, never a signal hue (brief §3).
+
+export type ItemIconKind = 'PICK' | 'TONIC' | 'FLASK' | 'WARD' | 'COIN';
+export const ITEM_ICON_KINDS: readonly ItemIconKind[] = ['PICK', 'TONIC', 'FLASK', 'WARD', 'COIN'];
+
+const ITEM_ICON_PX = 64; // 16-cell stencil @ 4px
+const LOOT_MARKER_PX = 64;
+
+const STENCILS: Record<ItemIconKind, readonly string[]> = {
+  // skeleton key: ring bow left, shaft right, two cut teeth
+  PICK: [
+    '................',
+    '................',
+    '....####........',
+    '...#....#.......',
+    '...#....#.......',
+    '...#....#.......',
+    '...#....#.......',
+    '....###########.',
+    '....###########.',
+    '.........#..#...',
+    '.........#..#...',
+    '.........#..#...',
+    '................',
+    '................',
+    '................',
+    '................',
+  ],
+  // medicine bottle: cap + neck + body, bandage strip with a bone cross
+  TONIC: [
+    '................',
+    '.....####.......',
+    '.....####.......',
+    '......##........',
+    '....######......',
+    '...########.....',
+    '..##########....',
+    '..###.##.###....',
+    '....######......',
+    '....######......',
+    '..###.##.###....',
+    '..##########....',
+    '..##########....',
+    '..##########....',
+    '................',
+    '................',
+  ],
+  // round-bottom flask: wide cork, narrow neck, bulb body
+  FLASK: [
+    '................',
+    '.....####.......',
+    '.....####.......',
+    '......##........',
+    '......##........',
+    '.....####.......',
+    '....######......',
+    '...########.....',
+    '..##########....',
+    '.############...',
+    '.############...',
+    '.############...',
+    '..##########....',
+    '...########.....',
+    '................',
+    '................',
+  ],
+  // etched ward-charm: shield plaque with a rune (staff + cross bar + base),
+  // deliberately eyeless — the sigil is a mark, not a watcher
+  WARD: [
+    '................',
+    '..##########....',
+    '..#........#....',
+    '..#...##...#....',
+    '..#..####..#....',
+    '..#...##...#....',
+    '..#...##...#....',
+    '..#.######.#....',
+    '..#...##...#....',
+    '..#...##...#....',
+    '..#..####..#....',
+    '..#........#....',
+    '...#......#.....',
+    '....####........',
+    '................',
+    '................',
+  ],
+  // porter's coin: disc, notched rim, stamped square centre
+  COIN: [
+    '................',
+    '................',
+    '................',
+    '....######......',
+    '..##......##....',
+    '.#...####...#...',
+    '.#..#....#..#...',
+    '##..#....#..##..',
+    '##..#....#..##..',
+    '.#..#....#..#...',
+    '.#...####...#...',
+    '..##......##....',
+    '....######......',
+    '................',
+    '................',
+    '................',
+  ],
+};
+
+// nailed crate frame for the 3D loot pile: 2-cell border + corner rivets,
+// the item icon stamped into the clear middle
+const CRATE_STENCIL: readonly string[] = [
+  '################',
+  '################',
+  '##............##',
+  '##.#........#.##',
+  '##............##',
+  '##............##',
+  '##............##',
+  '##............##',
+  '##............##',
+  '##............##',
+  '##............##',
+  '##............##',
+  '##.#........#.##',
+  '##............##',
+  '################',
+  '################',
+];
+
+function blitStencil(img: PaintImage, map: readonly string[], ox: number, oy: number, cell: number, rgb: RGB): void {
+  for (let gy = 0; gy < map.length; gy++) {
+    const row = map[gy];
+    for (let gx = 0; gx < row.length; gx++) {
+      if (row[gx] !== '#') continue;
+      for (let dy = 0; dy < cell; dy++) {
+        const py = oy + gy * cell + dy;
+        for (let dx = 0; dx < cell; dx++) {
+          const i = (py * img.width + ox + gx * cell + dx) * 4;
+          img.data[i] = rgb[0];
+          img.data[i + 1] = rgb[1];
+          img.data[i + 2] = rgb[2];
+          img.data[i + 3] = 255;
+        }
+      }
+    }
+  }
+}
+
+export function itemIconTexture(kind: ItemIconKind): THREE.Texture {
+  const key = `item@${kind}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const p = getPalette();
+  const canvas = createCanvas(ITEM_ICON_PX);
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(ITEM_ICON_PX, ITEM_ICON_PX);
+  blitStencil(img, STENCILS[kind], 0, 0, ITEM_ICON_PX / 16, p.bone);
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas as unknown as HTMLCanvasElement);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  cache.set(key, tex);
+  return tex;
+}
+
+export function getLootMarkerTexture(kind: ItemType): THREE.Texture {
+  const key = `loot@${kind}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const p = getPalette();
+  const canvas = createCanvas(LOOT_MARKER_PX);
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(LOOT_MARKER_PX, LOOT_MARKER_PX);
+  blitStencil(img, CRATE_STENCIL, 0, 0, LOOT_MARKER_PX / 16, p.bone);
+  // icon stamped at 2px cells, centred in the crate's clear middle
+  blitStencil(img, STENCILS[kind], 16, 16, 2, p.bone);
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas as unknown as HTMLCanvasElement);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  cache.set(key, tex);
+  return tex;
+}
+
 // ---- byte accounting for budget.ts (pure, no WebGL) ----------------------
 export function textureBytesFor(quality: Quality, roomsAlive: number): number {
   const q = QUALITY[quality];
   const atlas = (q.wallPx * 2) ** 2 * 4;
   const emissive = 4 * EMISSIVE_PX * EMISSIVE_PX * 4;
   const numerals = roomsAlive * NUMERAL_PX * NUMERAL_PX * 4;
-  return atlas + emissive + numerals;
+  // item art pass: five kit icons + four loot-crate markers, cached once each
+  const icons = ITEM_ICON_KINDS.length * ITEM_ICON_PX * ITEM_ICON_PX * 4;
+  const lootMarkers = 4 * LOOT_MARKER_PX * LOOT_MARKER_PX * 4;
+  return atlas + emissive + numerals + icons + lootMarkers;
 }
 
 // Keys the test suite walks to prove "every texture is generated, no fetch".
@@ -355,6 +560,15 @@ export const TEXTURE_KEYS = [
   'emissive@alcove',
   'emissive@ao',
   'emissive@closet',
+  'item@PICK',
+  'item@TONIC',
+  'item@FLASK',
+  'item@WARD',
+  'item@COIN',
+  'loot@PICK',
+  'loot@TONIC',
+  'loot@FLASK',
+  'loot@WARD',
 ] as const;
 
 export function textureCacheSize(): number {
