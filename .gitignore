@@ -5,3 +5,9 @@ __pycache__/
 *.pyc
 *.db
 .env
+*.tsbuildinfo
+# HackathonFactory internal orchestration state — not part of the public repo
+state.json
+# NOTE: .idea/ and .junie/ are intentionally NOT ignored — the competition rules
+# require committing them as JetBrains tool-use evidence
+# (see submission/deliverables-checklist.md row 3).
