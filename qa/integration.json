@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-18",
+  "by": "orchestrator",
+  "stack": { "backend": "uvicorn main:app 127.0.0.1:8401 (venv)", "frontend": "vite preview 8402 (dist)" },
+  "contract_probes": {
+    "GET /health": "PASS {status:ok, llm:{online:true, model:qwen3.8-flash-next}}",
+    "GET /api/scores?limit=5": "PASS {scores:[...]}",
+    "POST /api/scores valid": "PASS {ok:true,id:1,rank:1}",
+    "POST /api/scores invalid deepest_door": "PASS 4xx {ok:false,error:'deepest_door must be an integer in 1..24'}",
+    "POST /api/scores score:true": "PASS-by-design (score is ignored extra; rank server-computed from deepest_door/run_time_ms/deaths)",
+    "POST /api/flavor epitaph GAUNT": "PASS {available:true, source:'llm', live local vLLM text}",
+    "frontend /": "PASS <title>HALLWAKE</title>",
+    "favicon.ico": "PASS 200 (T4 fixed the 404)"
+  },
+  "browser_gate": {
+    "attract": "PASS — HALLWAKE wordmark, 01-24 door row + lantern sweep, controls line, last-5 ledger shows live server rows",
+    "hud": "PASS — door log NEXT▸nn + ledger ticks + checkpoint pips, oil tube with % readout, door numeral stencil in-world, fps meter",
+    "autopilot_full_run": "PASS — 24/24 doors, 0 deaths, all 4 entity events cleared (mounts verified: would die otherwise), 56 FPS steady dev machine",
+    "console": "0 errors; warnings only suspended-AudioContext (by design — arms on first input; autopilot has no gesture)"
+  },
+  "notes": [
+    "56-58 FPS on dev machine; quality auto-detect tiers exist (fps probe at 3s/6s, steps down <45fps); booth target 60fps on mid iGPU to be re-measured in QA",
+    "test rows GATE-TEST/X left in dev DB (gitignored)",
+    "screenshots: qa/shots/attract.png, qa/shots/corridor-hud.png"
+  ],
+  "verdict": "PASS"
+}
