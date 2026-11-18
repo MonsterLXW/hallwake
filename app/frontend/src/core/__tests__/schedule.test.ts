@@ -13,6 +13,8 @@ import {
   archetypeGeom,
   doorDef,
 } from '../schedule';
+import { GAUNT_TELL_LEAD } from '../entities';
+import { WALK_SPEED } from '../sim';
 
 describe('24-door schedule table', () => {
   it('has exactly 24 rows, doors 1..24 in order', () => {
@@ -67,10 +69,40 @@ describe('24-door schedule table', () => {
       }
     }
     expect(doorDef(7).gaunt!.alcoveIndex).toBe(0);
-    expect(doorDef(13).gaunt!.alcoveIndex).toBe(2);
+    expect(doorDef(13).gaunt!.alcoveIndex).toBe(1);
     expect(doorDef(19).gaunt!.alcoveIndex).toBe(1);
     expect(doorDef(24).gaunt!.alcoveIndex).toBe(1);
   });
+
+  // REACHABILITY INVARIANT (T1-defect): a GAUNT door is only survivable if
+  // the player can physically reach its alcove before the sweep pins them.
+  // The player spawns at ENTRY at roomTick 0; the first hidden check is the
+  // tick after the sweep starts (roomTick = tellTick + GAUNT_TELL_LEAD + 1),
+  // and moving on that tick fails the |vel| < 0.2 test — so the last tick
+  // they may move is sweepStart = tellTick + GAUNT_TELL_LEAD. Reachable
+  // radius from ENTRY = WALK_SPEED * sweepStart / 60. Alcove distance is
+  // point-to-AABB: a straight-line lower bound on any collider-detour path,
+  // so passing this test is necessary (not sufficient) for reachability.
+  // MARGIN = 1.0 m (~27 ticks) of routing slack for collider detours and
+  // human imprecision at the booth.
+  const REACH_MARGIN = 1.0;
+  for (const door of [7, 13, 19, 24]) {
+    it(`door ${door} GAUNT: alcove reachable from ENTRY with >= ${REACH_MARGIN} m slack`, () => {
+      const def = doorDef(door);
+      const g = def.gaunt!;
+      const sweepStart = g.tellTick + GAUNT_TELL_LEAD;
+      const maxTravel = (WALK_SPEED * sweepStart) / 60;
+      const a = archetypeGeom(def.archetype).alcoves[g.alcoveIndex];
+      const cx = Math.min(Math.max(ENTRY.x, a.x0), a.x1);
+      const cz = Math.min(Math.max(ENTRY.z, a.z0), a.z1);
+      const dist = Math.hypot(cx - ENTRY.x, cz - ENTRY.z);
+      expect(
+        dist + REACH_MARGIN,
+        `door ${door}: alcove ${g.alcoveIndex} sits ${dist.toFixed(3)} m from ENTRY ` +
+          `but tellTick ${g.tellTick} only allows ${maxTravel.toFixed(3)} m of travel`,
+      ).toBeLessThanOrEqual(maxTravel);
+    });
+  }
 
   it('CINDER sconce relight orders are exactly the authored table', () => {
     expect(doorDef(9).cinderOrder).toEqual([0, 1, 2]);

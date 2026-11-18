@@ -171,7 +171,14 @@ export const SCHEDULE: DoorDef[] = [
   },
   {
     door: 13, archetype: 'guest', variant: 'A', event: 'GAUNT', checkpoint: true,
-    gaunt: { alcoveIndex: 2, tellTick: 60, waypoints: [[13, 2], [1, 8]] },
+    // Alcove 1 (east, near entry): waypoint (13,2) sits inside it, so the
+    // GAUNT steps out of the very nook you hide in — the door-7 pattern,
+    // mirrored and escalated (checkpoint door). The sweep ends at (1,8),
+    // inside the far alcove 2: the tempting far nook is the trap, not the
+    // hiding spot. Alcove 2 was unreachable at tellTick 60 (7.998 m from
+    // ENTRY vs 7.517 m travel budget) — see the reachability invariant in
+    // schedule.test.ts.
+    gaunt: { alcoveIndex: 1, tellTick: 60, waypoints: [[13, 2], [1, 8]] },
   },
   { door: 14, archetype: 'washroom', variant: 'B', event: null, checkpoint: false },
   {

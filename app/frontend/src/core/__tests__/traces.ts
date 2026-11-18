@@ -75,6 +75,27 @@ export const TRACES: Trace[] = [
     },
   },
   {
+    name: 'gaunt13_survive',
+    // Door 13 (guest A, checkpoint): GAUNT tell roomTick 60, sweep
+    // 205..564, resolve 565; alcove idx1 = x[12.4,13.8] z[0.6,2.6].
+    // Walk east 148 ticks: x = 7 + 148*0.0366667 = 12.42667 in
+    // [12.4,13.8], z = 1.5 in [0.6,2.6] -> parked at tick 148, well
+    // before the first hidden check at 206. Hidden + still for every
+    // sweep tick -> SURVIVED. (Straight-line check: 5.4 m to the alcove
+    // vs 205*0.0366667 = 7.517 m budget; the old alcove idx2 at 7.998 m
+    // was unreachable -> this trace is the regression guard.)
+    start: { door: 13, oil: 1.0 },
+    frames: [...move(148, 1, 0), ...idle(422)], // 570 ticks
+    expect: {
+      alive: true,
+      door: 13,
+      // oil = 1 - 570/5400 = 0.894444 -> band 17
+      oilBand: 17,
+      phases: { GAUNT: 'SURVIVED' },
+      deaths: 0,
+    },
+  },
+  {
     name: 'murmur10_beam_walk',
     // Beam locked on MURMUR (yaw = corner bearing), back 100 ticks toward
     // the exit, then hold. Worst cone error at z = 5.16667:
